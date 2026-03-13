@@ -1,0 +1,6 @@
+<tree>
+    <field name="name"/>
+    <field name="model"/>
+    <field name="page"/>
+    <field name="schema"/>
+</tree>

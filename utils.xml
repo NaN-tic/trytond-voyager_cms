@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<!-- This file is part of Tryton.  The COPYRIGHT file at the top level of
+this repository contains the full copyright notices and license terms. -->
+<tryton>
+    <data>
+        <!-- www.page -->
+        <record model="ir.ui.view" id="www_page_view_tree">
+            <field name="model">www.page</field>
+            <field name="type">tree</field>
+            <field name="name">page_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_page_view_form">
+            <field name="model">www.page</field>
+            <field name="type">form</field>
+            <field name="name">page_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_page">
+            <field name="name">Pages</field>
+            <field name="res_model">www.page</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_page_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_page_view_tree"/>
+            <field name="act_window" ref="act_www_page"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_page_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_page_view_form"/>
+            <field name="act_window" ref="act_www_page"/>
+        </record>
+        <record model="ir.model.button" id="www_page_generate_uri_button">
+            <field name="name">generate_uri</field>
+            <field name="string">Generate URI</field>
+            <field name="model">www.page</field>
+        </record>
+
+        <!-- www.component -->
+        <record model="ir.ui.view" id="www_component_view_tree">
+            <field name="model">www.component</field>
+            <field name="type">tree</field>
+            <field name="name">component_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_component_view_tree_sequence">
+            <field name="model">www.component</field>
+            <field name="type">tree</field>
+            <field name="priority" eval="20"/>
+            <field name="name">component_tree_sequence</field>
+        </record>
+        <record model="ir.ui.view" id="www_component_view_form">
+            <field name="model">www.component</field>
+            <field name="type">form</field>
+            <field name="name">component_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_component">
+            <field name="name">Components</field>
+            <field name="res_model">www.component</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_component_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_component_view_tree"/>
+            <field name="act_window" ref="act_www_component"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_component_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_component_view_form"/>
+            <field name="act_window" ref="act_www_component"/>
+        </record>
+
+        <!-- www.schema -->
+        <record model="ir.ui.view" id="www_schema_view_form">
+            <field name="model">www.schema</field>
+            <field name="type">form</field>
+            <field name="name">schema_form</field>
+        </record>
+        <record model="ir.ui.view" id="www_schema_view_tree">
+            <field name="model">www.schema</field>
+            <field name="type">tree</field>
+            <field name="name">schema_tree</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_schema">
+            <field name="name">Schemas</field>
+            <field name="res_model">www.schema</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_schema_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_schema_view_tree"/>
+            <field name="act_window" ref="act_www_schema"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_schema_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_schema_view_form"/>
+            <field name="act_window" ref="act_www_schema"/>
+        </record>
+
+
+        <menuitem parent="voyager.menu_site" action="act_www_page" id="menu_www_page"/>
+        <menuitem parent="voyager.menu_site" action="act_www_component" id="menu_www_component"/>
+        <menuitem parent="voyager.menu_site" action="act_www_schema" id="menu_www_schema"/>
+    </data>
+</tryton>

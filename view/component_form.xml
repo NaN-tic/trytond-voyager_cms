@@ -1,0 +1,10 @@
+<form>
+    <label name="name"/>
+    <field name="name"/>
+    <label name="model"/>
+    <field name="model"/>
+    <label name="page"/>
+    <field name="page"/>
+    <label name="schema"/>
+    <field name="schema"/>
+</form>

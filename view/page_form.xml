@@ -1,0 +1,25 @@
+<form>
+    <label name="name"/>
+    <field name="name"/>
+    <label name="site"/>
+    <field name="site"/>
+    <newline/>
+    <label name="uri_es"/>
+    <field name="uri_es"/>
+    <label name="main_uri_es"/>
+    <field name="main_uri_es"/>
+    <label name="uri_en"/>
+    <field name="uri_en"/>
+    <label name="main_uri_en"/>
+    <field name="main_uri_en"/>
+    <label name="uri_ca"/>
+    <field name="uri_ca"/>
+    <label name="main_uri_ca"/>
+    <field name="main_uri_ca"/>
+    <group id="buttons" col="-1" colspan="4">
+        <button name="generate_uri"/>
+    </group>
+    <newline/>
+    <field name="component" colspan="4" mode="tree,form"
+        view_ids="voyager_cms.www_component_view_tree_sequence,voyager_cms.www_component_view_form"/>
+</form>
