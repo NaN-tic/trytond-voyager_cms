@@ -9,12 +9,8 @@ def register():
         utils.Page,
         utils.Component,
         utils.Schema,
-        utils.PageDummy,
+        utils.ContentWrapper,
         utils.VoyagerURI,
         utils.VoyagerMenu,
         utils.VoyagerSite,
         module='voyager_cms', type_='model')
-    Pool.register(
-        module='voyager_cms', type_='wizard')
-    Pool.register(
-        module='voyager_cms', type_='report')

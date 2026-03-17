@@ -92,6 +92,13 @@ this repository contains the full copyright notices and license terms. -->
             <field name="act_window" ref="act_www_schema"/>
         </record>
 
+        <record model="ir.ui.view" id="menu_view_form">
+            <field name="model">www.menu</field>
+            <field name="type" eval="None"/>
+            <field name="inherit" ref="voyager.menu_form"/>
+            <field name="name">menu_form</field>
+        </record>
+
 
         <menuitem parent="voyager.menu_site" action="act_www_page" id="menu_www_page"/>
         <menuitem parent="voyager.menu_site" action="act_www_component" id="menu_www_component"/>
