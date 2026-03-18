@@ -6,8 +6,7 @@ from trytond.modules.voyager.voyager import Endpoint
 from trytond.tools import slugify
 from dominate.tags import div
 from trytond.pyson import Eval
-from trytond.transaction import Transaction
-      
+
 LANGS = ['es', 'en', 'ca']
 
 
@@ -16,64 +15,16 @@ class Page(ModelSQL, ModelView):
 
     name = fields.Char('Name', required=True)
     site = fields.Many2One('www.site', 'Site', required=True)
-
     uri_es = fields.Char('URI ES')
     main_uri_es = fields.Boolean('Main URI ES')
-
     uri_en = fields.Char('URI EN')
     main_uri_en = fields.Boolean('Main URI EN')
-
     uri_ca = fields.Char('URI CA')
     main_uri_ca = fields.Boolean('Main URI CA')
-
     component = fields.One2Many(
         'www.component', 'page', 'Components',
         order=[('sequence', 'ASC')],
     )
-
-    # ---------------------------------------------------------------------
-    # Helpers
-    # ---------------------------------------------------------------------
-
-    @staticmethod
-    def _uris_from_name(name):
-        if not name:
-            return (None, None, None)
-        base = slugify(name)
-        if base:
-            base = base.lower()
-        if not base:
-            return (None, None, None)
-        return (f'/es/{base}', f'/en/{base}', f'/ca/{base}')
-
-    # ---------------------------------------------------------------------
-    # CRUD
-    # ---------------------------------------------------------------------
-
-    @classmethod
-    def create(cls, vlist):
-        vlist = [values.copy() for values in vlist]
-        for values in vlist:
-            if values.get('name'):
-                uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-                values.setdefault('uri_es', uri_es)
-                values.setdefault('uri_en', uri_en)
-                values.setdefault('uri_ca', uri_ca)
-        return super().create(vlist)
-
-    @classmethod
-    def write(cls, pages, values, *args):
-        values = values.copy()
-        if values.get('name'):
-            uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-            values.setdefault('uri_es', uri_es)
-            values.setdefault('uri_en', uri_en)
-            values.setdefault('uri_ca', uri_ca)
-        return super().write(pages, values, *args)
-
-    # ---------------------------------------------------------------------
-    # Setup / Validation
-    # ---------------------------------------------------------------------
 
     @classmethod
     def __setup__(cls):
@@ -99,9 +50,37 @@ class Page(ModelSQL, ModelView):
                   page=self.rec_name)
             )
 
-    # ---------------------------------------------------------------------
-    # Generate URI
-    # ---------------------------------------------------------------------
+    @staticmethod
+    def _uris_from_name(name):
+        if not name:
+            return (None, None, None)
+        base = slugify(name)
+        if base:
+            base = base.lower()
+        if not base:
+            return (None, None, None)
+        return (f'/es/{base}', f'/en/{base}', f'/ca/{base}')
+
+    @classmethod
+    def create(cls, vlist):
+        vlist = [values.copy() for values in vlist]
+        for values in vlist:
+            if values.get('name'):
+                uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
+                values.setdefault('uri_es', uri_es)
+                values.setdefault('uri_en', uri_en)
+                values.setdefault('uri_ca', uri_ca)
+        return super().create(vlist)
+
+    @classmethod
+    def write(cls, pages, values, *args):
+        values = values.copy()
+        if values.get('name'):
+            uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
+            values.setdefault('uri_es', uri_es)
+            values.setdefault('uri_en', uri_en)
+            values.setdefault('uri_ca', uri_ca)
+        return super().write(pages, values, *args)
 
     @classmethod
     @ModelView.button
@@ -192,6 +171,23 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     model = fields.Many2One('ir.model', 'Model', required=True)
     page = fields.Many2One('www.page', 'Page')
     schema = fields.Many2One('www.schema', 'Schema')
+    #TODO: replace schema with the resource field, the components will need to
+    # be changed too. WAIT UNTIL HAVE ALL THE CHANGES IN NANTIC MODULE DONE
+    resource = fields.Reference('Resource', selection='get_resources',
+        readonly=True)
+
+    @classmethod
+    def get_resources(cls):
+        Model = Pool().get('ir.model')
+        models = Model.search([('name', 'in', cls._get_resources())])
+        return [(None, '')] + [
+            (model.name, model.string)
+            for model in models
+        ]
+
+    @classmethod
+    def _get_resources(cls):
+        return ['www.schema']
 
 
 class Schema(ModelSQL, ModelView):
@@ -199,43 +195,21 @@ class Schema(ModelSQL, ModelView):
 
     component = fields.Many2One('www.component', 'Component')
     icon = fields.Char('Icon')
-    menu = fields.Many2One(
-        'www.menu', 'Menu',
+    menu = fields.Many2One('www.menu', 'Menu',
         domain=[('parent', '=', None)],
     )
-    model_name = fields.Function(fields.Char('Model Name'),
-        'on_change_with_model_name')
+    model_name = fields.Function(
+        fields.Char('Model Name'), 'on_change_with_model_name')
 
 
+# We use this component as the default endpoint for all the pages URIs
+# generated via voyager_cms.
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
     _url = '/content-wrapper'
     _type = 'www'
+
     page = fields.Many2One('www.page', 'Page')
-
-    @classmethod
-    def __register__(cls, module_name):
-        cursor = Transaction().connection.cursor()
-        cursor.execute(
-            "SELECT id FROM ir_model WHERE name = %s",
-            ('www.content.wrapper',))
-        new = cursor.fetchone()
-        cursor.execute(
-            "SELECT id FROM ir_model WHERE name = %s",
-            ('www.page.dummy',))
-        old = cursor.fetchone()
-
-        if old and not new:
-            cursor.execute(
-                "UPDATE ir_model SET name = %s WHERE id = %s",
-                ('www.content.wrapper', old[0]))
-        elif old and new and old[0] != new[0]:
-            # Migrate existing URI endpoint references from old model id.
-            cursor.execute(
-                "UPDATE www_uri SET endpoint = %s WHERE endpoint = %s",
-                (new[0], old[0]))
-
-        super().__register__(module_name)
 
     def get_not_found_content(self):
         """Override this method to customize the 'page not found' content."""
@@ -249,20 +223,15 @@ class ContentWrapper(Endpoint):
 
     def render(self):
         pool = Pool()
+
         layout_component = self.site.layout
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel()
-            #layout = (
-            #    LayoutModel(schema=layout_component.schema)
-            #    if layout_component.schema
-            #    else LayoutModel()
-            #)
+
         def _render_layout(content, title):
             if layout is None:
-                # Keep voyager_cms self-contained: render content without requiring
-                # any layout model from external modules.
                 return content.render()
             try:
                 return layout.render(content=content, title=title)
@@ -296,16 +265,14 @@ class ContentWrapper(Endpoint):
 
         return _render_layout(content=page_content, title=self.page.name)
 
+
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
     @classmethod
     def _get_resources(cls):
-        return super()._get_resources() + [
-            'www.voyager.url',
-            'www.page',
-        ]
-    
+        return super()._get_resources() + ['www.page',]
+
 
 class VoyagerMenu(metaclass=PoolMeta):
     __name__ = 'www.menu'
@@ -314,7 +281,7 @@ class VoyagerMenu(metaclass=PoolMeta):
         states={
             'invisible': Eval('type') != 'component',
         },
-        depends=['type'],)
+        depends=['type'])
 
     @classmethod
     def __setup__(cls):

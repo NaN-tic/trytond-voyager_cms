@@ -92,11 +92,20 @@ this repository contains the full copyright notices and license terms. -->
             <field name="act_window" ref="act_www_schema"/>
         </record>
 
+        <!-- www.menu -->
         <record model="ir.ui.view" id="menu_view_form">
             <field name="model">www.menu</field>
             <field name="type" eval="None"/>
             <field name="inherit" ref="voyager.menu_form"/>
             <field name="name">menu_form</field>
+        </record>
+
+        <!-- www.site -->
+        <record model="ir.ui.view" id="site_view_form">
+            <field name="model">www.site</field>
+            <field name="type" eval="None"/>
+            <field name="inherit" ref="voyager.site_form"/>
+            <field name="name">site_form</field>
         </record>
 
 
