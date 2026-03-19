@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<data>
+    <xpath expr="//field[@name='title']" position="after">
+        <separator string="CMS" colspan="4" id="cms"/>
+        <label name="layout"/>
+        <field name="layout"/>
+        <label name="header"/>
+        <field name="header"/>
+        <label name="footer"/>
+        <field name="footer"/>
+    </xpath>
+</data>
