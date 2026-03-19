@@ -46,6 +46,14 @@ class Page(ModelSQL, ModelView):
             return (None, None, None)
         return (f'/es/{base}', f'/en/{base}', f'/ca/{base}')
 
+    @classmethod
+    def _fill_uri_fields(cls, values, name):
+        uri_es, uri_en, uri_ca = cls._uris_from_name(name)
+        for code, uri_value in zip(LANGS, (uri_es, uri_en, uri_ca)):
+            field_name = f'uri_{code}'
+            if uri_value and not values.get(field_name):
+                values[field_name] = uri_value
+
     # ---------------------------------------------------------------------
     # CRUD
     # ---------------------------------------------------------------------
@@ -55,20 +63,14 @@ class Page(ModelSQL, ModelView):
         vlist = [values.copy() for values in vlist]
         for values in vlist:
             if values.get('name'):
-                uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-                values.setdefault('uri_es', uri_es)
-                values.setdefault('uri_en', uri_en)
-                values.setdefault('uri_ca', uri_ca)
+                cls._fill_uri_fields(values, values['name'])
         return super().create(vlist)
 
     @classmethod
     def write(cls, pages, values, *args):
         values = values.copy()
         if values.get('name'):
-            uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-            values.setdefault('uri_es', uri_es)
-            values.setdefault('uri_en', uri_en)
-            values.setdefault('uri_ca', uri_ca)
+            cls._fill_uri_fields(values, values['name'])
         return super().write(pages, values, *args)
 
     # ---------------------------------------------------------------------
@@ -212,30 +214,6 @@ class ContentWrapper(Endpoint):
     _url = '/content-wrapper'
     _type = 'www'
     page = fields.Many2One('www.page', 'Page')
-
-    @classmethod
-    def __register__(cls, module_name):
-        cursor = Transaction().connection.cursor()
-        cursor.execute(
-            "SELECT id FROM ir_model WHERE name = %s",
-            ('www.content.wrapper',))
-        new = cursor.fetchone()
-        cursor.execute(
-            "SELECT id FROM ir_model WHERE name = %s",
-            ('www.page.dummy',))
-        old = cursor.fetchone()
-
-        if old and not new:
-            cursor.execute(
-                "UPDATE ir_model SET name = %s WHERE id = %s",
-                ('www.content.wrapper', old[0]))
-        elif old and new and old[0] != new[0]:
-            # Migrate existing URI endpoint references from old model id.
-            cursor.execute(
-                "UPDATE www_uri SET endpoint = %s WHERE endpoint = %s",
-                (new[0], old[0]))
-
-        super().__register__(module_name)
 
     def get_not_found_content(self):
         """Override this method to customize the 'page not found' content."""
