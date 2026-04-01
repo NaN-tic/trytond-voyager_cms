@@ -1,11 +1,20 @@
-from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
-from trytond.pool import Pool, PoolMeta
+import inspect
+import re
+from datetime import date
+from html import escape
+from pathlib import Path
+from urllib.parse import urlparse
+
+from dominate.tags import div
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
-from trytond.modules.voyager.voyager import Endpoint
-from trytond.tools import slugify
-from dominate.tags import div
+from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
+from trytond.modules.voyager.voyager import Endpoint, VoyagerContext
+from trytond.pool import Pool, PoolMeta
 from trytond.pyson import Eval
+from trytond.tools import slugify
+from trytond.transaction import Transaction
+from trytond.url import http_host
 
 LANGS = ['es', 'en', 'ca']
 
@@ -25,10 +34,15 @@ class Page(ModelSQL, ModelView):
         'www.component', 'page', 'Components',
         order=[('sequence', 'ASC')],
     )
-
-    # ---------------------------------------------------------------------
-    # Helpers
-    # ---------------------------------------------------------------------
+    preview = fields.Function(
+        fields.Binary('Page Preview', filename='preview_filename'),
+        'get_preview')
+    preview_url = fields.Function(
+        fields.Char('Preview URL', readonly=True),
+        'get_preview_url')
+    preview_filename = fields.Function(
+        fields.Char('Preview Filename', readonly=True),
+        'get_preview_filename')
 
     @staticmethod
     def _uris_from_name(name):
@@ -49,10 +63,6 @@ class Page(ModelSQL, ModelView):
             if uri_value and not values.get(field_name):
                 values[field_name] = uri_value
 
-    # ---------------------------------------------------------------------
-    # CRUD
-    # ---------------------------------------------------------------------
-
     @classmethod
     def create(cls, vlist):
         vlist = [values.copy() for values in vlist]
@@ -67,10 +77,6 @@ class Page(ModelSQL, ModelView):
         if values.get('name'):
             cls._fill_uri_fields(values, values['name'])
         return super().write(pages, values, *args)
-
-    # ---------------------------------------------------------------------
-    # Setup / Validation
-    # ---------------------------------------------------------------------
 
     @classmethod
     def __setup__(cls):
@@ -93,40 +99,8 @@ class Page(ModelSQL, ModelView):
         )) > 1:
             raise UserError(
                 _('nantic.msg_page_main_uri_unique',
-                  page=self.rec_name)
+                    page=self.rec_name)
             )
-
-    @staticmethod
-    def _uris_from_name(name):
-        if not name:
-            return (None, None, None)
-        base = slugify(name)
-        if base:
-            base = base.lower()
-        if not base:
-            return (None, None, None)
-        return (f'/es/{base}', f'/en/{base}', f'/ca/{base}')
-
-    @classmethod
-    def create(cls, vlist):
-        vlist = [values.copy() for values in vlist]
-        for values in vlist:
-            if values.get('name'):
-                uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-                values.setdefault('uri_es', uri_es)
-                values.setdefault('uri_en', uri_en)
-                values.setdefault('uri_ca', uri_ca)
-        return super().create(vlist)
-
-    @classmethod
-    def write(cls, pages, values, *args):
-        values = values.copy()
-        if values.get('name'):
-            uri_es, uri_en, uri_ca = cls._uris_from_name(values['name'])
-            values.setdefault('uri_es', uri_es)
-            values.setdefault('uri_en', uri_en)
-            values.setdefault('uri_ca', uri_ca)
-        return super().write(pages, values, *args)
 
     @classmethod
     @ModelView.button
@@ -194,7 +168,6 @@ class Page(ModelSQL, ModelView):
                 new_uris.append(uri)
                 uri_by_code[code] = uri
 
-            # ---- main_uri logic ----
             main_uri = uri_by_code.get(main_code) if main_code else None
 
             for uri in new_uris:
@@ -209,6 +182,68 @@ class Page(ModelSQL, ModelView):
             if existing_uris:
                 URI.delete(list(existing_uris.values()))
 
+    @staticmethod
+    def _preview_message(message):
+        return Component._build_preview_document(
+            '<div style="padding: 1rem; color: #666; font-family: sans-serif;">'
+            f'{escape(message)}'
+            '</div>'
+        )
+
+    @classmethod
+    def render_preview_content(cls, page):
+        pool = Pool()
+        Wrapper = pool.get('www.content.wrapper')
+        site = page.site if page and page.site else None
+        voyager_context = Transaction().context.get('voyager_context')
+        if voyager_context:
+            voyager_context = VoyagerContext(
+                site=site or getattr(voyager_context, 'site', None),
+                session=getattr(voyager_context, 'session', None),
+                cache=getattr(voyager_context, 'cache', None),
+                request=getattr(voyager_context, 'request', None),
+                adapter=getattr(voyager_context, 'adapter', None),
+                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
+                web_prefix=getattr(voyager_context, 'web_prefix', None),
+            )
+        else:
+            voyager_context = VoyagerContext(site=site)
+        with Transaction().set_context(
+                voyager_context=voyager_context,
+                voyager_cms_preview=True):
+            rendered = Wrapper(page=page).render()
+        content = Component._rendered_to_string(rendered)
+        if not (content or '').strip():
+            return cls._preview_message('No preview available.')
+        return Component._ensure_preview_document(content, site=site)
+
+    @fields.depends('site', 'component', 'name')
+    def get_preview(self, name=None):
+        if not self.site:
+            return self._preview_message(
+                'Select a site to preview the page.'
+            ).encode()
+        try:
+            return self.render_preview_content(self).encode()
+        except Exception as exc:
+            return Component._build_preview_document(
+                '<div style="padding: 1rem; font-family: monospace; '
+                'white-space: pre-wrap; color: #b91c1c;">'
+                f'{escape(str(exc) or "Preview not available.")}'
+                '</div>'
+            ).encode()
+
+    @fields.depends('id')
+    def get_preview_filename(self, name=None):
+        return f'page-preview-{self.id or "new"}.html'
+
+    @fields.depends('id')
+    def get_preview_url(self, name=None):
+        if not self.id or self.id <= 0:
+            return ''
+        database = Transaction().database.name
+        return f'/{database}/voyager_cms/page-preview/{self.id}'
+
 
 class Component(sequence_ordered(), ModelSQL, ModelView):
     __name__ = 'www.component'
@@ -217,10 +252,19 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     model = fields.Many2One('ir.model', 'Model', required=True)
     page = fields.Many2One('www.page', 'Page')
     schema = fields.Many2One('www.schema', 'Schema')
-    #TODO: replace schema with the resource field, the components will need to
+    # TODO: replace schema with the resource field, the components will need to
     # be changed too. WAIT UNTIL HAVE ALL THE CHANGES IN NANTIC MODULE DONE
-    resource = fields.Reference('Resource', selection='get_resources',
-        readonly=True)
+    resource = fields.Reference(
+        'Resource', selection='get_resources', readonly=True)
+    preview = fields.Function(
+        fields.Binary('HTML Preview', filename='preview_filename'),
+        'get_preview')
+    preview_url = fields.Function(
+        fields.Char('Preview URL', readonly=True),
+        'get_preview_url')
+    preview_filename = fields.Function(
+        fields.Char('Preview Filename', readonly=True),
+        'get_preview_filename')
 
     @classmethod
     def get_resources(cls):
@@ -235,46 +279,537 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     def _get_resources(cls):
         return ['www.schema']
 
+    @classmethod
+    def _preview_image(cls):
+        return (
+            'data:image/svg+xml,'
+            '%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 '
+            'viewBox=%220 0 1200 800%22%3E'
+            '%3Crect width=%221200%22 height=%22800%22 fill=%22%23e2e8f0%22/%3E'
+            '%3Ctext x=%22600%22 y=%22400%22 text-anchor=%22middle%22 '
+            'font-family=%22sans-serif%22 font-size=%2264%22 '
+            'fill=%22%23475569%22%3EPreview%3C/text%3E%3C/svg%3E'
+        )
+
+    @classmethod
+    def _preview_text_value(cls, field_name, field):
+        field_name = field_name.lower()
+        string = getattr(field, 'string', '') or field_name.replace('_', ' ')
+        if 'title' in field_name:
+            return f'Preview {string}'.strip()
+        if 'subtitle' in field_name:
+            return f'Sample {string}'.strip()
+        if field_name.startswith('text') or 'description' in field_name:
+            return (
+                f'Preview content for {string}. This placeholder is shown '
+                'until a schema with real content is assigned.'
+            )
+        if 'alt' in field_name:
+            return 'Preview image'
+        if 'url' in field_name or 'href' in field_name or 'link' in field_name:
+            return '#'
+        if 'icon' in field_name:
+            return 'M12 4v16m8-8H4'
+        if 'color' in field_name:
+            return 'bg-slate-50'
+        return f'Preview {string}'.strip()
+
+    @classmethod
+    def _preview_selection_value(cls, field_name, field):
+        options = getattr(field, 'selection', None) or []
+        preferred_by_name = {
+            'background_hue': 'slate',
+            'background_color': 'bg-slate-50',
+        }
+        preferred = preferred_by_name.get(field_name)
+        values = [value for value, _label in options if value not in (None, '')]
+        if preferred in values:
+            return preferred
+        return values[0] if values else None
+
+    @classmethod
+    def _preview_value_for_field(cls, field_name, field):
+        field_name = field_name.lower()
+        integer_types = tuple(t for t in [
+            getattr(fields, 'Integer', None),
+            getattr(fields, 'BigInteger', None),
+        ] if t)
+        numeric_types = tuple(t for t in [
+            getattr(fields, 'Float', None),
+            getattr(fields, 'Numeric', None),
+        ] if t)
+
+        if isinstance(field, fields.Many2One):
+            if field.model_name == 'www.menu':
+                Menu = Pool().get('www.menu')
+                menu = Menu()
+                menu.name = 'Preview Menu'
+                menu.menus = []
+                return menu
+            return None
+
+        if isinstance(field, fields.Selection):
+            return cls._preview_selection_value(field_name, field)
+        if isinstance(field, fields.Date):
+            return date.today()
+        if isinstance(field, fields.Boolean):
+            return True
+        if integer_types and isinstance(field, integer_types):
+            return 3
+        if numeric_types and isinstance(field, numeric_types):
+            return 3
+        if isinstance(field, (fields.Char, fields.Text)):
+            if 'image' in field_name and (
+                    'url' in field_name or 'src' in field_name):
+                return cls._preview_image()
+            if field_name == 'items_json':
+                return '[]'
+            return cls._preview_text_value(field_name, field)
+        return None
+
+    @classmethod
+    def _build_preview_schema(cls):
+        pool = Pool()
+        Schema = pool.get('www.schema')
+
+        schema = Schema()
+        for field_name, field in Schema._fields.items():
+            if field_name in {
+                    'component', 'id', 'create_uid', 'create_date',
+                    'write_uid', 'write_date', 'rec_name', 'model_name'}:
+                continue
+            value = cls._preview_value_for_field(field_name, field)
+            if value is not None:
+                setattr(schema, field_name, value)
+        return schema
+
+    @classmethod
+    def get_component_resource(cls, model, resource=None, schema=None):
+        resource = resource or schema
+        if resource:
+            return resource
+        if (
+                Transaction().context.get('voyager_cms_preview')
+                and 'schema' in getattr(model, '_fields', {})):
+            return cls._build_preview_schema()
+        return None
+
+    @classmethod
+    def get_component_kwargs(cls, model, resource=None, schema=None):
+        resource = cls.get_component_resource(model, resource, schema)
+        if not resource:
+            return {}
+
+        kwargs = {}
+        if 'resource' in model._fields:
+            kwargs['resource'] = resource
+        if (
+                getattr(resource, '__name__', None) == 'www.schema'
+                and 'schema' in model._fields):
+            kwargs['schema'] = resource
+        return kwargs
+
+    @classmethod
+    def _preview_assets_html(cls, content='', site=None, model_name=None):
+        base_url = http_host()
+        if not base_url.endswith('/'):
+            base_url += '/'
+        return (
+            f'<base href="{base_url}"/>'
+            f'{cls._preview_styles_html(content, site, model_name)}'
+            '<style>'
+            'html, body { margin: 0; padding: 0; }'
+            '</style>'
+        )
+
+    @classmethod
+    def _preview_asset_models(cls, site=None, model_name=None):
+        pool = Pool()
+        models = []
+        seen = set()
+
+        for name in filter(None, [
+                    getattr(
+                        getattr(getattr(site, 'layout', None), 'model', None),
+                        'name', None),
+                    getattr(
+                        getattr(getattr(site, 'header', None), 'model', None),
+                        'name', None),
+                    getattr(
+                        getattr(getattr(site, 'footer', None), 'model', None),
+                        'name', None),
+                    model_name]):
+            if name in seen:
+                continue
+            seen.add(name)
+            models.append(pool.get(name))
+        return models
+
+    @staticmethod
+    def _preview_module_root(model):
+        try:
+            module_path = Path(inspect.getfile(model)).resolve()
+        except (OSError, TypeError):
+            return None
+
+        for path in module_path.parents:
+            if path.parent.name == 'modules':
+                return path
+        return None
+
+    @classmethod
+    def _preview_asset_paths(cls, model, content=''):
+        if getattr(model, '__name__', None) == 'www.web_layout':
+            return ['/static/output.css']
+        getter = getattr(model, 'get_preview_stylesheet_paths', None)
+        if callable(getter):
+            paths = getter() or []
+            if isinstance(paths, (str, Path)):
+                return [paths]
+            return list(paths)
+        paths = cls._linked_stylesheet_paths(model, content)
+        if paths:
+            return paths
+        return []
+
+    @classmethod
+    def _resolve_preview_asset_path(cls, model, asset_path):
+        path = Path(asset_path)
+        if path.is_absolute():
+            return path
+
+        module_root = cls._preview_module_root(model)
+        if not module_root:
+            return None
+        return module_root / path
+
+    @classmethod
+    def _extract_stylesheet_hrefs(cls, content):
+        hrefs = []
+        pattern = re.compile(
+            r'<link\b[^>]*rel=["\'][^"\']*stylesheet[^"\']*["\'][^>]*href=["\']([^"\']+)["\']'
+            r'|<link\b[^>]*href=["\']([^"\']+)["\'][^>]*rel=["\'][^"\']*stylesheet[^"\']*["\']',
+            re.IGNORECASE)
+        for match in pattern.finditer(content or ''):
+            href = match.group(1) or match.group(2)
+            if href:
+                hrefs.append(href)
+        return hrefs
+
+    @classmethod
+    def _linked_stylesheet_paths(cls, model, content=''):
+        module_root = cls._preview_module_root(model)
+        if not module_root:
+            return []
+
+        paths = []
+        seen = set()
+        for href in cls._extract_stylesheet_hrefs(content):
+            parsed = urlparse(href)
+            if parsed.scheme or parsed.netloc:
+                continue
+            candidates = []
+            candidate = parsed.path.lstrip('/')
+            if candidate:
+                candidates.append(module_root / candidate)
+                candidates.append(module_root / 'static' / Path(candidate).name)
+                candidates.extend(module_root.rglob(Path(candidate).name))
+            for path in candidates:
+                resolved = cls._resolve_preview_asset_path(model, path)
+                if not resolved or not resolved.exists() or resolved.is_dir():
+                    continue
+                key = str(resolved)
+                if key in seen:
+                    continue
+                seen.add(key)
+                paths.append(resolved)
+                break
+        return paths
+
+    @staticmethod
+    def _uses_tailwind_cdn(content):
+        return 'cdn.tailwindcss.com' in (content or '')
+
+    @classmethod
+    def _module_output_css_paths(cls, model):
+        module_root = cls._preview_module_root(model)
+        if not module_root:
+            return []
+        return sorted(module_root.rglob('output.css'))
+
+    @classmethod
+    def _preview_styles_html(cls, content='', site=None, model_name=None):
+        styles = []
+        seen = set()
+        for model in cls._preview_asset_models(site, model_name):
+            if getattr(model, '__name__', None) == 'www.web_layout':
+                styles.append('<script src="https://cdn.tailwindcss.com"></script>')
+            head_getter = getattr(model, 'get_preview_head_html', None)
+            if callable(head_getter):
+                head_html = head_getter() or ''
+                if head_html:
+                    styles.append(head_html)
+
+            for css_file in cls._preview_asset_paths(model, content):
+                if isinstance(css_file, str) and css_file.startswith('/'):
+                    if css_file in seen:
+                        continue
+                    seen.add(css_file)
+                    styles.append(
+                        f'<link rel="stylesheet" href="{css_file}"/>')
+                    continue
+                css_path = cls._resolve_preview_asset_path(model, css_file)
+                if not css_path:
+                    continue
+                try:
+                    key = str(css_path.resolve())
+                except OSError:
+                    key = str(css_path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    css_content = css_path.read_text(encoding='utf-8')
+                except (OSError, UnicodeDecodeError):
+                    continue
+                if not css_content.strip():
+                    continue
+                styles.append(f'<style>{css_content}</style>')
+        return ''.join(styles)
+
+    @classmethod
+    def _build_preview_document(
+            cls, content, extra_head='', site=None, model_name=None):
+        return (
+            '<!DOCTYPE html>'
+            '<html lang="ca">'
+            '<head>'
+            '<meta charset="utf-8"/>'
+            '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
+            f'{cls._preview_assets_html(content, site, model_name)}'
+            f'{extra_head}'
+            '</head>'
+            '<body>'
+            f'{content}'
+            '</body>'
+            '</html>'
+        )
+
+    @classmethod
+    def _ensure_preview_document(cls, content, site=None, model_name=None):
+        lower = content[:500].lower()
+        if (
+                content.lstrip().lower().startswith('<!doctype html>')
+                or '<html' in lower):
+            if '<head' in lower and '</head>' in content.lower():
+                return content.replace(
+                    '</head>',
+                    f'{cls._preview_assets_html(content, site, model_name)}</head>',
+                    1)
+            return cls._build_preview_document(
+                content, site=site, model_name=model_name)
+        return cls._build_preview_document(
+            content, site=site, model_name=model_name)
+
+    @staticmethod
+    def _rendered_to_string(rendered):
+        return rendered.render() if hasattr(rendered, 'render') else str(rendered or '')
+
+    @classmethod
+    def render_with_site_layout(cls, site, content, title):
+        if not site:
+            return content
+
+        pool = Pool()
+        layout_component = getattr(site, 'layout', None)
+        layout = None
+        if layout_component and layout_component.model:
+            LayoutModel = pool.get(layout_component.model.name)
+            layout = LayoutModel(
+                **cls.get_component_kwargs(
+                    LayoutModel, layout_component.resource,
+                    layout_component.schema))
+        if layout is None:
+            return content
+        voyager_context = Transaction().context.get('voyager_context')
+        if voyager_context:
+            voyager_context = VoyagerContext(
+                site=site,
+                session=getattr(voyager_context, 'session', None),
+                cache=getattr(voyager_context, 'cache', None),
+                request=getattr(voyager_context, 'request', None),
+                adapter=getattr(voyager_context, 'adapter', None),
+                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
+                web_prefix=getattr(voyager_context, 'web_prefix', None),
+            )
+        else:
+            voyager_context = VoyagerContext(site=site)
+        with Transaction().set_context(voyager_context=voyager_context):
+            try:
+                return layout.render(content=content, title=title)
+            except TypeError as exc:
+                if "unexpected keyword argument 'content'" not in str(exc):
+                    raise
+                try:
+                    return layout.render(content, title=title)
+                except TypeError as nested_exc:
+                    if "unexpected keyword argument 'title'" not in str(nested_exc):
+                        raise
+                    if hasattr(layout, 'main'):
+                        layout.main.add(content)
+                    if hasattr(layout, 'title'):
+                        layout.title = title
+                    return layout.render()
+
+    @classmethod
+    def render_component_content(cls, model_name, resource=None, schema=None):
+        pool = Pool()
+        ComponentModel = pool.get(model_name)
+        with div() as content:
+            tag = ComponentModel(
+                **cls.get_component_kwargs(ComponentModel, resource, schema)
+            ).tag()
+            if tag is not None and not getattr(content, 'children', None):
+                content.add(tag)
+        return content
+
+    @classmethod
+    def _normalize_preview_html(cls, content):
+        if not content:
+            return content
+        content = re.sub(
+            r'(<(?:img|source|iframe|video|audio)\b[^>]*\bsrc=["\'])Preview(["\'])',
+            rf'\1{cls._preview_image()}\2',
+            content,
+            flags=re.IGNORECASE)
+        content = re.sub(
+            r'(<a\b[^>]*\bhref=["\'])Preview(["\'])',
+            r'\1#\2',
+            content,
+            flags=re.IGNORECASE)
+        content = re.sub(
+            r'(<(?:img|source)\b[^>]*\bsrcset=["\'])Preview(["\'])',
+            rf'\1{cls._preview_image()}\2',
+            content,
+            flags=re.IGNORECASE)
+        content = re.sub(
+            r'(<(?:path|glyph)\b[^>]*\bd=["\'])Preview(["\'])',
+            r'\1M12 4v16m8-8H4\2',
+            content,
+            flags=re.IGNORECASE)
+        return content
+
+    @classmethod
+    def render_preview_content(cls, component):
+        site = component.page.site if component.page and component.page.site else None
+        voyager_context = Transaction().context.get('voyager_context')
+        if voyager_context:
+            voyager_context = VoyagerContext(
+                site=site or getattr(voyager_context, 'site', None),
+                session=getattr(voyager_context, 'session', None),
+                cache=getattr(voyager_context, 'cache', None),
+                request=getattr(voyager_context, 'request', None),
+                adapter=getattr(voyager_context, 'adapter', None),
+                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
+                web_prefix=getattr(voyager_context, 'web_prefix', None),
+            )
+        else:
+            voyager_context = VoyagerContext(site=site)
+        with Transaction().set_context(
+                voyager_context=voyager_context,
+                voyager_cms_preview=True):
+            rendered = cls.render_component_content(
+                component.model.name, component.resource, component.schema)
+            if site:
+                rendered = cls.render_with_site_layout(
+                    site, rendered, component.page.name or component.name)
+        content = cls._rendered_to_string(rendered)
+        if not (content or '').strip():
+            return cls._build_preview_document(
+                '<div style="padding: 1rem; color: #cbd5e1; '
+                'font-family: sans-serif;">'
+                'No preview available.'
+                '</div>',
+                site=site,
+                model_name=component.model.name)
+        content = cls._normalize_preview_html(content)
+        return cls._ensure_preview_document(
+            content, site=site, model_name=component.model.name)
+
+    @fields.depends('model', 'resource', 'schema')
+    def get_preview(self, name=None):
+        if not self.model:
+            return self._build_preview_document(
+                '<div style="padding: 1rem; color: #cbd5e1; '
+                'font-family: sans-serif;">'
+                'Select a component model to preview it.'
+                '</div>', model_name=self.model.name if self.model else None
+            ).encode()
+        try:
+            content = self.render_preview_content(self)
+        except Exception as exc:
+            content = (
+                '<div style="padding: 1rem; font-family: monospace; '
+                'white-space: pre-wrap; color: #fca5a5;">'
+                f'{escape(str(exc) or "Preview not available.")}'
+                '</div>'
+            )
+            content = self._build_preview_document(
+                content,
+                site=self.page.site if self.page and self.page.site else None,
+                model_name=self.model.name)
+        return content.encode()
+
+    @fields.depends('id')
+    def get_preview_filename(self, name=None):
+        return f'component-preview-{self.id or "new"}.html'
+
+    @fields.depends('id')
+    def get_preview_url(self, name=None):
+        if not self.id or self.id <= 0:
+            return ''
+        database = Transaction().database.name
+        return f'/{database}/voyager_cms/component-preview/{self.id}'
+
 
 class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
     component = fields.Many2One('www.component', 'Component')
     icon = fields.Char('Icon')
-    menu = fields.Many2One('www.menu', 'Menu',
+    menu = fields.Many2One(
+        'www.menu', 'Menu',
         domain=[('parent', '=', None)],
     )
-    model_name = fields.Function(
-        fields.Char('Model Name'), 'on_change_with_model_name')
+    model_name = fields.Function(fields.Char('Model Name'),
+        'on_change_with_model_name')
 
 
-# We use this component as the default endpoint for all the pages URIs
-# generated via voyager_cms.
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
     _url = '/content-wrapper'
     _type = 'www'
-
     page = fields.Many2One('www.page', 'Page')
 
     def get_not_found_content(self):
-        """Override this method to customize the 'page not found' content."""
         with div() as content:
             content.add(div(_("Page not found")))
         return content
 
     def get_not_found_title(self):
-        """Override this method to customize the 'page not found' title."""
         return _("Page not found")
 
     def render(self):
         pool = Pool()
-
+        Component = pool.get('www.component')
         layout_component = self.site.layout
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
-            layout = LayoutModel()
+            layout = LayoutModel(
+                **Component.get_component_kwargs(
+                    LayoutModel, layout_component.resource,
+                    layout_component.schema))
 
         def _render_layout(content, title):
             if layout is None:
@@ -304,10 +839,11 @@ class ContentWrapper(Endpoint):
         with div() as page_content:
             for component in self.page.component:
                 ComponentModel = pool.get(component.model.name)
-                if component.schema:
-                    ComponentModel(schema=component.schema).tag()
-                else:
-                    ComponentModel().tag()
+                ComponentModel(
+                    **Component.get_component_kwargs(
+                        ComponentModel, component.resource,
+                        component.schema)
+                ).tag()
 
         return _render_layout(content=page_content, title=self.page.name)
 
@@ -317,7 +853,7 @@ class VoyagerURI(metaclass=PoolMeta):
 
     @classmethod
     def _get_resources(cls):
-        return super()._get_resources() + ['www.page',]
+        return super()._get_resources() + ['www.page']
 
 
 class VoyagerMenu(metaclass=PoolMeta):

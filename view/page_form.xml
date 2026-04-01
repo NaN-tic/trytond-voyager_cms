@@ -1,25 +1,33 @@
 <form>
-    <label name="name"/>
-    <field name="name"/>
-    <label name="site"/>
-    <field name="site"/>
-    <newline/>
-    <label name="uri_es"/>
-    <field name="uri_es"/>
-    <label name="main_uri_es"/>
-    <field name="main_uri_es"/>
-    <label name="uri_en"/>
-    <field name="uri_en"/>
-    <label name="main_uri_en"/>
-    <field name="main_uri_en"/>
-    <label name="uri_ca"/>
-    <field name="uri_ca"/>
-    <label name="main_uri_ca"/>
-    <field name="main_uri_ca"/>
+    <group col="4" colspan="4" xalign="0.0" xexpand="1" xfill="1" id="page_header">
+        <label name="name" xalign="0.0"/>
+        <field name="name" xexpand="1" xfill="1"/>
+        <label name="site" xalign="0.0"/>
+        <field name="site" xexpand="1" xfill="1"/>
+        <label name="uri_es" xalign="0.0"/>
+        <field name="uri_es" xexpand="1" xfill="1"/>
+        <label name="main_uri_es" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="main_uri_es" xexpand="0" xfill="0"/>
+        <label name="uri_en" xalign="0.0"/>
+        <field name="uri_en" xexpand="1" xfill="1"/>
+        <label name="main_uri_en" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="main_uri_en" xexpand="0" xfill="0"/>
+        <label name="uri_ca" xalign="0.0"/>
+        <field name="uri_ca" xexpand="1" xfill="1"/>
+        <label name="main_uri_ca" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="main_uri_ca" xexpand="0" xfill="0"/>
+    </group>
     <group id="buttons" col="-1" colspan="4">
         <button name="generate_uri"/>
     </group>
-    <newline/>
-    <field name="component" colspan="4" mode="tree,form"
-        view_ids="voyager_cms.www_component_view_tree_sequence,voyager_cms.www_component_view_form"/>
+    <notebook colspan="4">
+        <page string="Components" id="components">
+            <field name="component" colspan="4" mode="tree,form"
+                view_ids="voyager_cms.www_component_view_tree_sequence,voyager_cms.www_component_view_form"/>
+        </page>
+        <page string="Page Preview" id="page_preview">
+            <field name="preview" widget="document" colspan="4" height="700"/>
+        </page>
+    </notebook>
+    <field name="preview_url" invisible="1"/>
 </form>

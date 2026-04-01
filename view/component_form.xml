@@ -1,10 +1,15 @@
 <form>
-    <label name="name"/>
-    <field name="name"/>
-    <label name="model"/>
-    <field name="model"/>
-    <label name="page"/>
-    <field name="page"/>
-    <label name="schema"/>
-    <field name="schema"/>
+    <group col="4" colspan="4" xalign="0.0" xexpand="1" xfill="1" id="component_fields">
+        <label name="name" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="name" xexpand="1" xfill="1"/>
+        <label name="model" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="model" xexpand="1" xfill="1"/>
+        <label name="resource" xalign="0.0" xexpand="0" xfill="0"/>
+        <field name="resource" colspan="3" xexpand="1" xfill="1"/>
+    </group>
+    <field name="page" invisible="1"/>
+    <field name="preview_url" invisible="1"/>
+    <newline/>
+    <separator string="HTML Preview" colspan="4"/>
+    <field name="preview" widget="document" colspan="4" height="600"/>
 </form>

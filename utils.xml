@@ -109,8 +109,9 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
 
-        <menuitem parent="voyager.menu_site" action="act_www_page" id="menu_www_page"/>
-        <menuitem parent="voyager.menu_site" action="act_www_component" id="menu_www_component"/>
-        <menuitem parent="voyager.menu_site" action="act_www_schema" id="menu_www_schema"/>
+        <menuitem id="menu_voyager_cms" name="voyager_cms" sequence="210"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_page" id="menu_www_page"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema"/>
     </data>
 </tryton>
