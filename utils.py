@@ -37,9 +37,6 @@ class Page(ModelSQL, ModelView):
     preview = fields.Function(
         fields.Binary('Page Preview', filename='preview_filename'),
         'get_preview')
-    preview_url = fields.Function(
-        fields.Char('Preview URL', readonly=True),
-        'get_preview_url')
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
@@ -237,13 +234,6 @@ class Page(ModelSQL, ModelView):
     def get_preview_filename(self, name=None):
         return f'page-preview-{self.id or "new"}.html'
 
-    @fields.depends('id')
-    def get_preview_url(self, name=None):
-        if not self.id or self.id <= 0:
-            return ''
-        database = Transaction().database.name
-        return f'/{database}/voyager_cms/page-preview/{self.id}'
-
 
 class Component(sequence_ordered(), ModelSQL, ModelView):
     __name__ = 'www.component'
@@ -259,9 +249,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
-    preview_url = fields.Function(
-        fields.Char('Preview URL', readonly=True),
-        'get_preview_url')
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
@@ -460,7 +447,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     @classmethod
     def _preview_asset_paths(cls, model, content=''):
         if getattr(model, '__name__', None) == 'www.web_layout':
-            return ['/static/output.css']
+            return ['/static_www/output.css']
         getter = getattr(model, 'get_preview_stylesheet_paths', None)
         if callable(getter):
             paths = getter() or []
@@ -542,8 +529,8 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         styles = []
         seen = set()
         for model in cls._preview_asset_models(site, model_name):
-            if getattr(model, '__name__', None) == 'www.web_layout':
-                styles.append('<script src="https://cdn.tailwindcss.com"></script>')
+            #if getattr(model, '__name__', None) == 'www.web_layout':
+            #    styles.append('<script src="https://cdn.tailwindcss.com"></script>')
             head_getter = getattr(model, 'get_preview_head_html', None)
             if callable(head_getter):
                 head_html = head_getter() or ''
@@ -673,6 +660,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 content.add(tag)
         return content
 
+##Revisar si questa funcio serveix per algo
     @classmethod
     def _normalize_preview_html(cls, content):
         if not content:
@@ -732,19 +720,12 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 '</div>',
                 site=site,
                 model_name=component.model.name)
-        content = cls._normalize_preview_html(content)
+        #content = cls._normalize_preview_html(content)
         return cls._ensure_preview_document(
             content, site=site, model_name=component.model.name)
 
     @fields.depends('model', 'resource', 'schema')
     def get_preview(self, name=None):
-        if not self.model:
-            return self._build_preview_document(
-                '<div style="padding: 1rem; color: #cbd5e1; '
-                'font-family: sans-serif;">'
-                'Select a component model to preview it.'
-                '</div>', model_name=self.model.name if self.model else None
-            ).encode()
         try:
             content = self.render_preview_content(self)
         except Exception as exc:
@@ -758,18 +739,12 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 content,
                 site=self.page.site if self.page and self.page.site else None,
                 model_name=self.model.name)
+        print(f'CONTENT: {content}')
         return content.encode()
 
     @fields.depends('id')
     def get_preview_filename(self, name=None):
         return f'component-preview-{self.id or "new"}.html'
-
-    @fields.depends('id')
-    def get_preview_url(self, name=None):
-        if not self.id or self.id <= 0:
-            return ''
-        database = Transaction().database.name
-        return f'/{database}/voyager_cms/component-preview/{self.id}'
 
 
 class Schema(ModelSQL, ModelView):
