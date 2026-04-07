@@ -209,7 +209,10 @@ class Page(ModelSQL, ModelView):
                 voyager_context=voyager_context,
                 voyager_cms_preview=True):
             rendered = Wrapper(page=page).render()
-        content = Component._rendered_to_string(rendered)
+        if hasattr(rendered, 'render'):
+            content = rendered.render()
+        else:
+            content = str(rendered or '')
         if not (content or '').strip():
             return cls._preview_message('No preview available.')
         return Component._ensure_preview_document(content, site=site)
@@ -242,8 +245,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     model = fields.Many2One('ir.model', 'Model', required=True)
     page = fields.Many2One('www.page', 'Page')
     schema = fields.Many2One('www.schema', 'Schema')
-    # TODO: replace schema with the resource field, the components will need to
-    # be changed too. WAIT UNTIL HAVE ALL THE CHANGES IN NANTIC MODULE DONE
     resource = fields.Reference(
         'Resource', selection='get_resources', readonly=True)
     preview = fields.Function(
@@ -397,19 +398,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return kwargs
 
     @classmethod
-    def _preview_assets_html(cls, content='', site=None, model_name=None):
-        base_url = http_host()
-        if not base_url.endswith('/'):
-            base_url += '/'
-        return (
-            f'<base href="{base_url}"/>'
-            f'{cls._preview_styles_html(content, site, model_name)}'
-            '<style>'
-            'html, body { margin: 0; padding: 0; }'
-            '</style>'
-        )
-
-    @classmethod
     def _preview_asset_models(cls, site=None, model_name=None):
         pool = Pool()
         models = []
@@ -443,21 +431,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
             if path.parent.name == 'modules':
                 return path
         return None
-
-    @classmethod
-    def _preview_asset_paths(cls, model, content=''):
-        if getattr(model, '__name__', None) == 'www.web_layout':
-            return ['/static_www/output.css']
-        getter = getattr(model, 'get_preview_stylesheet_paths', None)
-        if callable(getter):
-            paths = getter() or []
-            if isinstance(paths, (str, Path)):
-                return [paths]
-            return list(paths)
-        paths = cls._linked_stylesheet_paths(model, content)
-        if paths:
-            return paths
-        return []
 
     @classmethod
     def _resolve_preview_asset_path(cls, model, asset_path):
@@ -525,56 +498,21 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return sorted(module_root.rglob('output.css'))
 
     @classmethod
-    def _preview_styles_html(cls, content='', site=None, model_name=None):
-        styles = []
-        seen = set()
-        for model in cls._preview_asset_models(site, model_name):
-            #if getattr(model, '__name__', None) == 'www.web_layout':
-            #    styles.append('<script src="https://cdn.tailwindcss.com"></script>')
-            head_getter = getattr(model, 'get_preview_head_html', None)
-            if callable(head_getter):
-                head_html = head_getter() or ''
-                if head_html:
-                    styles.append(head_html)
-
-            for css_file in cls._preview_asset_paths(model, content):
-                if isinstance(css_file, str) and css_file.startswith('/'):
-                    if css_file in seen:
-                        continue
-                    seen.add(css_file)
-                    styles.append(
-                        f'<link rel="stylesheet" href="{css_file}"/>')
-                    continue
-                css_path = cls._resolve_preview_asset_path(model, css_file)
-                if not css_path:
-                    continue
-                try:
-                    key = str(css_path.resolve())
-                except OSError:
-                    key = str(css_path)
-                if key in seen:
-                    continue
-                seen.add(key)
-                try:
-                    css_content = css_path.read_text(encoding='utf-8')
-                except (OSError, UnicodeDecodeError):
-                    continue
-                if not css_content.strip():
-                    continue
-                styles.append(f'<style>{css_content}</style>')
-        return ''.join(styles)
-
-    @classmethod
     def _build_preview_document(
             cls, content, extra_head='', site=None, model_name=None):
+        base_url = http_host()
+        base_styles = ''
+        if not site:
+            base_styles = '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>'
         return (
             '<!DOCTYPE html>'
             '<html lang="ca">'
             '<head>'
             '<meta charset="utf-8"/>'
             '<meta name="viewport" content="width=device-width, initial-scale=1"/>'
-            f'{cls._preview_assets_html(content, site, model_name)}'
+            f'<base href="{base_url}"/>'
             f'{extra_head}'
+            f'{base_styles}'
             '</head>'
             '<body>'
             f'{content}'
@@ -588,19 +526,10 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         if (
                 content.lstrip().lower().startswith('<!doctype html>')
                 or '<html' in lower):
-            if '<head' in lower and '</head>' in content.lower():
-                return content.replace(
-                    '</head>',
-                    f'{cls._preview_assets_html(content, site, model_name)}</head>',
-                    1)
             return cls._build_preview_document(
                 content, site=site, model_name=model_name)
         return cls._build_preview_document(
             content, site=site, model_name=model_name)
-
-    @staticmethod
-    def _rendered_to_string(rendered):
-        return rendered.render() if hasattr(rendered, 'render') else str(rendered or '')
 
     @classmethod
     def render_with_site_layout(cls, site, content, title):
@@ -614,8 +543,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
                 **cls.get_component_kwargs(
-                    LayoutModel, layout_component.resource,
-                    layout_component.schema))
+                    LayoutModel, layout_component.resource))
         if layout is None:
             return content
         voyager_context = Transaction().context.get('voyager_context')
@@ -660,33 +588,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 content.add(tag)
         return content
 
-##Revisar si questa funcio serveix per algo
-    @classmethod
-    def _normalize_preview_html(cls, content):
-        if not content:
-            return content
-        content = re.sub(
-            r'(<(?:img|source|iframe|video|audio)\b[^>]*\bsrc=["\'])Preview(["\'])',
-            rf'\1{cls._preview_image()}\2',
-            content,
-            flags=re.IGNORECASE)
-        content = re.sub(
-            r'(<a\b[^>]*\bhref=["\'])Preview(["\'])',
-            r'\1#\2',
-            content,
-            flags=re.IGNORECASE)
-        content = re.sub(
-            r'(<(?:img|source)\b[^>]*\bsrcset=["\'])Preview(["\'])',
-            rf'\1{cls._preview_image()}\2',
-            content,
-            flags=re.IGNORECASE)
-        content = re.sub(
-            r'(<(?:path|glyph)\b[^>]*\bd=["\'])Preview(["\'])',
-            r'\1M12 4v16m8-8H4\2',
-            content,
-            flags=re.IGNORECASE)
-        return content
-
     @classmethod
     def render_preview_content(cls, component):
         site = component.page.site if component.page and component.page.site else None
@@ -707,11 +608,14 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 voyager_context=voyager_context,
                 voyager_cms_preview=True):
             rendered = cls.render_component_content(
-                component.model.name, component.resource, component.schema)
+                component.model.name, component.resource)
             if site:
                 rendered = cls.render_with_site_layout(
                     site, rendered, component.page.name or component.name)
-        content = cls._rendered_to_string(rendered)
+        if hasattr(rendered, 'render'):
+            content = rendered.render()
+        else:
+            content = str(rendered or '')
         if not (content or '').strip():
             return cls._build_preview_document(
                 '<div style="padding: 1rem; color: #cbd5e1; '
@@ -720,7 +624,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 '</div>',
                 site=site,
                 model_name=component.model.name)
-        #content = cls._normalize_preview_html(content)
         return cls._ensure_preview_document(
             content, site=site, model_name=component.model.name)
 
@@ -739,7 +642,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 content,
                 site=self.page.site if self.page and self.page.site else None,
                 model_name=self.model.name)
-        print(f'CONTENT: {content}')
         return content.encode()
 
     @fields.depends('id')
@@ -783,8 +685,7 @@ class ContentWrapper(Endpoint):
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
                 **Component.get_component_kwargs(
-                    LayoutModel, layout_component.resource,
-                    layout_component.schema))
+                    LayoutModel, layout_component.resource))
 
         def _render_layout(content, title):
             if layout is None:
@@ -816,8 +717,7 @@ class ContentWrapper(Endpoint):
                 ComponentModel = pool.get(component.model.name)
                 ComponentModel(
                     **Component.get_component_kwargs(
-                        ComponentModel, component.resource,
-                        component.schema)
+                        ComponentModel, component.resource)
                 ).tag()
 
         return _render_layout(content=page_content, title=self.page.name)
