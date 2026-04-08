@@ -244,9 +244,8 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     name = fields.Char('Name', required=True)
     model = fields.Many2One('ir.model', 'Model', required=True)
     page = fields.Many2One('www.page', 'Page')
-    schema = fields.Many2One('www.schema', 'Schema')
     resource = fields.Reference(
-        'Resource', selection='get_resources', readonly=True)
+        'Resource', selection='get_resources')
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
@@ -372,8 +371,21 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return schema
 
     @classmethod
-    def get_component_resource(cls, model, resource=None, schema=None):
-        resource = resource or schema
+    def _resolve_reference_resource(cls, resource):
+        if not resource or not isinstance(resource, str) or ',' not in resource:
+            return resource
+        model_name, record_id = resource.split(',', 1)
+        if not model_name or not record_id:
+            return resource
+        try:
+            Model = Pool().get(model_name)
+            return Model(int(record_id))
+        except Exception:
+            return resource
+
+    @classmethod
+    def get_component_resource(cls, model, resource=None):
+        resource = cls._resolve_reference_resource(resource)
         if resource:
             return resource
         if (
@@ -383,8 +395,8 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
-    def get_component_kwargs(cls, model, resource=None, schema=None):
-        resource = cls.get_component_resource(model, resource, schema)
+    def get_component_kwargs(cls, model, resource=None):
+        resource = cls.get_component_resource(model, resource)
         if not resource:
             return {}
 
@@ -501,9 +513,9 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     def _build_preview_document(
             cls, content, extra_head='', site=None, model_name=None):
         base_url = http_host()
-        base_styles = ''
-        if not site:
-            base_styles = '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>'
+        # Always include Tailwind in preview so utility classes render
+        # even for standalone component previews.
+        base_styles = '<script src="https://cdn.tailwindcss.com"></script>'
         return (
             '<!DOCTYPE html>'
             '<html lang="ca">'
@@ -577,12 +589,12 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                     return layout.render()
 
     @classmethod
-    def render_component_content(cls, model_name, resource=None, schema=None):
+    def render_component_content(cls, model_name, resource=None):
         pool = Pool()
         ComponentModel = pool.get(model_name)
         with div() as content:
             tag = ComponentModel(
-                **cls.get_component_kwargs(ComponentModel, resource, schema)
+                **cls.get_component_kwargs(ComponentModel, resource)
             ).tag()
             if tag is not None and not getattr(content, 'children', None):
                 content.add(tag)
@@ -627,7 +639,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return cls._ensure_preview_document(
             content, site=site, model_name=component.model.name)
 
-    @fields.depends('model', 'resource', 'schema')
+    @fields.depends('model', 'resource')
     def get_preview(self, name=None):
         try:
             content = self.render_preview_content(self)

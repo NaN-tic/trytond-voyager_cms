@@ -11,11 +11,11 @@ class VoyagerCmsTestCase(ModuleTestCase):
     module = 'voyager_cms'
 
     @with_transaction()
-    def test_component_kwargs_use_legacy_schema_as_resource(self):
+    def test_component_kwargs_use_resource(self):
         Component = Pool().get('www.component')
         Schema = Pool().get('www.schema')
 
-        schema = Schema()
+        resource = Schema()
 
         class DummyModel:
             _fields = {
@@ -23,10 +23,29 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 'resource': object(),
             }
 
-        kwargs = Component.get_component_kwargs(DummyModel, None, schema)
+        kwargs = Component.get_component_kwargs(DummyModel, resource)
 
-        self.assertIs(kwargs['schema'], schema)
-        self.assertIs(kwargs['resource'], schema)
+        self.assertIs(kwargs['schema'], resource)
+        self.assertIs(kwargs['resource'], resource)
+
+    @with_transaction()
+    def test_component_resource_resolves_reference_string(self):
+        Component = Pool().get('www.component')
+        Schema = Pool().get('www.schema')
+
+        schema, = Schema.create([{'title': 'Schema Ref'}])
+
+        class DummyModel:
+            _fields = {
+                'schema': object(),
+                'resource': object(),
+            }
+
+        kwargs = Component.get_component_kwargs(
+            DummyModel, f'www.schema,{schema.id}')
+
+        self.assertEqual(kwargs['schema'].id, schema.id)
+        self.assertEqual(kwargs['resource'].id, schema.id)
 
     @with_transaction()
     def test_component_kwargs_build_preview_schema_without_resource(self):
