@@ -2,5 +2,5 @@
 <tree sequence="sequence" editable="1">
     <field name="name"/>
     <field name="model"/>
-    <field name="resource"/>
+    <field name="schema"/>
 </tree>

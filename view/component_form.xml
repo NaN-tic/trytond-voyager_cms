@@ -8,8 +8,6 @@
             <field name="name"/>
             <label name="model"/>
             <field name="model"/>
-            <label name="resource"/>
-            <field name="resource"/>
             <newline/>
             <field name="schema" mode="form,tree" colspan="4"/>
         </page>

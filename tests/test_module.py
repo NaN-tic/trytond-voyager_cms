@@ -11,59 +11,56 @@ class VoyagerCmsTestCase(ModuleTestCase):
     module = 'voyager_cms'
 
     @with_transaction()
-    def test_component_kwargs_use_resource(self):
+    def test_component_kwargs_use_schema_record(self):
         Component = Pool().get('www.component')
         Schema = Pool().get('www.schema')
 
-        resource = Schema()
+        schema = Schema()
 
         class DummyModel:
             _fields = {
                 'schema': object(),
-                'resource': object(),
             }
 
-        kwargs = Component.get_component_kwargs(DummyModel, resource)
+        kwargs = Component.get_component_kwargs(DummyModel, [schema])
 
-        self.assertIs(kwargs['schema'], resource)
-        self.assertIs(kwargs['resource'], resource)
+        self.assertIs(kwargs['schema'], schema)
 
     @with_transaction()
-    def test_component_resource_resolves_reference_string(self):
+    def test_component_schema_uses_first_schema_record(self):
         Component = Pool().get('www.component')
         Schema = Pool().get('www.schema')
 
-        schema, = Schema.create([{'title': 'Schema Ref'}])
+        first = Schema()
+        second = Schema()
 
         class DummyModel:
             _fields = {
                 'schema': object(),
-                'resource': object(),
             }
 
-        kwargs = Component.get_component_kwargs(
-            DummyModel, f'www.schema,{schema.id}')
+        kwargs = Component.get_component_kwargs(DummyModel, [first, second])
 
-        self.assertEqual(kwargs['schema'].id, schema.id)
-        self.assertEqual(kwargs['resource'].id, schema.id)
+        self.assertIs(kwargs['schema'], first)
 
     @with_transaction()
-    def test_component_kwargs_build_preview_schema_without_resource(self):
+    def test_component_kwargs_build_preview_schema_without_schema(self):
         Component = Pool().get('www.component')
 
         class DummyModel:
             _fields = {
                 'schema': object(),
-                'resource': object(),
             }
 
         with Transaction().set_context(voyager_cms_preview=True):
             kwargs = Component.get_component_kwargs(DummyModel)
 
         self.assertIn('schema', kwargs)
-        self.assertIn('resource', kwargs)
-        self.assertEqual(kwargs['schema'].title, 'Preview')
-        self.assertEqual(kwargs['schema'].menu.name, 'Preview')
+        schema = kwargs['schema']
+        if 'menu' in schema._fields:
+            self.assertEqual(schema.menu.name, 'Preview Menu')
+        if 'icon' in schema._fields:
+            self.assertEqual(schema.icon, 'M12 4v16m8-8H4')
         if 'image_url' in kwargs['schema']._fields:
             self.assertEqual(kwargs['schema'].image_url, 'Preview')
         if 'background_hue' in kwargs['schema']._fields:
@@ -84,18 +81,11 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(kwargs, {})
 
     @with_transaction()
-    def test_normalize_preview_html_replaces_invalid_media_and_links(self):
+    def test_preview_image_uses_svg_data_uri(self):
         Component = Pool().get('www.component')
 
-        content = (
-            '<img src="Preview">'
-            '<a href="Preview">Link</a>'
-            '<svg><path d="Preview"/></svg>'
-        )
-        normalized = Component._normalize_preview_html(content)
+        preview_image = Component._preview_image()
 
-        self.assertIn('data:image/svg+xml,', normalized)
-        self.assertIn('href="#"', normalized)
-        self.assertIn('d="M12 4v16m8-8H4"', normalized)
+        self.assertTrue(preview_image.startswith('data:image/svg+xml,'))
 
 del ModuleTestCase

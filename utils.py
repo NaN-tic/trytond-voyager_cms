@@ -244,8 +244,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     name = fields.Char('Name', required=True)
     model = fields.Many2One('ir.model', 'Model', required=True)
     page = fields.Many2One('www.page', 'Page')
-    resource = fields.Reference(
-        'Resource', selection='get_resources')
     schema = fields.One2Many('www.schema', 'component', "Schema",
         size=1, add_remove=[('component', '=', None)])
     preview = fields.Function(
@@ -254,19 +252,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
-
-    @classmethod
-    def get_resources(cls):
-        Model = Pool().get('ir.model')
-        models = Model.search([('name', 'in', cls._get_resources())])
-        return [(None, '')] + [
-            (model.name, model.string)
-            for model in models
-        ]
-
-    @classmethod
-    def _get_resources(cls):
-        return ['www.schema']
 
     @classmethod
     def _preview_image(cls):
@@ -373,23 +358,11 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return schema
 
     @classmethod
-    def _resolve_reference_resource(cls, resource):
-        if not resource or not isinstance(resource, str) or ',' not in resource:
-            return resource
-        model_name, record_id = resource.split(',', 1)
-        if not model_name or not record_id:
-            return resource
-        try:
-            Model = Pool().get(model_name)
-            return Model(int(record_id))
-        except Exception:
-            return resource
-
-    @classmethod
-    def get_component_resource(cls, model, resource=None):
-        resource = cls._resolve_reference_resource(resource)
-        if resource:
-            return resource
+    def get_component_schema(cls, model, schema=None):
+        if isinstance(schema, (list, tuple)):
+            schema = schema[0] if schema else None
+        if schema:
+            return schema
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
@@ -397,18 +370,14 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
-    def get_component_kwargs(cls, model, resource=None):
-        resource = cls.get_component_resource(model, resource)
-        if not resource:
+    def get_component_kwargs(cls, model, schema=None):
+        schema = cls.get_component_schema(model, schema)
+        if not schema:
             return {}
 
         kwargs = {}
-        if 'resource' in model._fields:
-            kwargs['resource'] = resource
-        if (
-                getattr(resource, '__name__', None) == 'www.schema'
-                and 'schema' in model._fields):
-            kwargs['schema'] = resource
+        if 'schema' in model._fields:
+            kwargs['schema'] = schema
         return kwargs
 
     @classmethod
@@ -557,7 +526,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
                 **cls.get_component_kwargs(
-                    LayoutModel, layout_component.resource))
+                    LayoutModel, layout_component.schema))
         if layout is None:
             return content
         voyager_context = Transaction().context.get('voyager_context')
@@ -591,12 +560,12 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                     return layout.render()
 
     @classmethod
-    def render_component_content(cls, model_name, resource=None):
+    def render_component_content(cls, model_name, schema=None):
         pool = Pool()
         ComponentModel = pool.get(model_name)
         with div() as content:
             tag = ComponentModel(
-                **cls.get_component_kwargs(ComponentModel, resource)
+                **cls.get_component_kwargs(ComponentModel, schema)
             ).tag()
             if tag is not None and not getattr(content, 'children', None):
                 content.add(tag)
@@ -622,7 +591,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 voyager_context=voyager_context,
                 voyager_cms_preview=True):
             rendered = cls.render_component_content(
-                component.model.name, component.resource)
+                component.model.name, component.schema)
             if site:
                 rendered = cls.render_with_site_layout(
                     site, rendered, component.page.name or component.name)
@@ -641,7 +610,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return cls._ensure_preview_document(
             content, site=site, model_name=component.model.name)
 
-    @fields.depends('model', 'resource')
+    @fields.depends('model', 'schema')
     def get_preview(self, name=None):
         try:
             content = self.render_preview_content(self)
@@ -675,6 +644,12 @@ class Schema(ModelSQL, ModelView):
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
 
+    @fields.depends('component', '_parent_component.model')
+    def on_change_with_model_name(self, name=None):
+        if self.component and self.component.model:
+            return self.component.model.name
+        return None
+
 
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
@@ -699,7 +674,7 @@ class ContentWrapper(Endpoint):
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
                 **Component.get_component_kwargs(
-                    LayoutModel, layout_component.resource))
+                    LayoutModel, layout_component.schema))
 
         def _render_layout(content, title):
             if layout is None:
@@ -731,7 +706,7 @@ class ContentWrapper(Endpoint):
                 ComponentModel = pool.get(component.model.name)
                 ComponentModel(
                     **Component.get_component_kwargs(
-                        ComponentModel, component.resource)
+                        ComponentModel, component.schema)
                 ).tag()
 
         return _render_layout(content=page_content, title=self.page.name)
