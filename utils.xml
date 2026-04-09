@@ -51,6 +51,11 @@ this repository contains the full copyright notices and license terms. -->
             <field name="type">form</field>
             <field name="name">component_form</field>
         </record>
+        <record model="ir.ui.view" id="www_component_view_list_form">
+            <field name="model">www.component</field>
+            <field name="type">list-form</field>
+            <field name="name">component_form</field>
+        </record>
         <record model="ir.action.act_window" id="act_www_component">
             <field name="name">Components</field>
             <field name="res_model">www.component</field>

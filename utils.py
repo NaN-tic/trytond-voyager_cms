@@ -246,6 +246,8 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     page = fields.Many2One('www.page', 'Page')
     resource = fields.Reference(
         'Resource', selection='get_resources')
+    schema = fields.One2Many('www.schema', 'component', "Schema",
+        size=1, add_remove=[('component', '=', None)])
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
