@@ -259,7 +259,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return (
             'data:image/svg+xml,'
             '%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 '
-            'viewBoComponent aleax=%220 0 1200 800%22%3E'
+            'viewBox=%220 0 1200 800%22%3E'
             '%3Crect width=%221200%22 height=%22800%22 fill=%22%23e2e8f0%22/%3E'
             '%3Ctext x=%22600%22 y=%22400%22 text-anchor=%22middle%22 '
             'font-family=%22sans-serif%22 font-size=%2264%22 '
@@ -343,7 +343,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
-    def _build_preview_schema(cls):
+    def _build_preview_schema(cls, include_visual=True):
         pool = Pool()
         Schema = pool.get('www.schema')
 
@@ -353,21 +353,62 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     'component', 'id', 'create_uid', 'create_date',
                     'write_uid', 'write_date', 'rec_name', 'model_name'}:
                 continue
+            lower_name = field_name.lower()
+            if not include_visual and (
+                    'color' in lower_name
+                    or 'hue' in lower_name
+                    or ('image' in lower_name and (
+                        'url' in lower_name or 'src' in lower_name))):
+                continue
             value = cls._preview_value_for_field(field_name, field)
             if value is not None:
                 setattr(schema, field_name, value)
         return schema
 
     @classmethod
+    def _build_preview_schema_with_values(cls, schema):
+        preview_schema = cls._build_preview_schema(include_visual=bool(schema))
+        if not schema:
+            return preview_schema
+
+        for field_name in getattr(preview_schema, '_fields', {}):
+            if field_name in {'id', 'create_uid', 'create_date',
+                    'write_uid', 'write_date', 'rec_name', 'model_name'}:
+                continue
+            if not hasattr(schema, field_name):
+                continue
+            value = getattr(schema, field_name)
+            if value is None:
+                continue
+            if isinstance(value, str) and value == '':
+                continue
+            if isinstance(value, (list, tuple)) and not value:
+                continue
+            setattr(preview_schema, field_name, value)
+        return preview_schema
+
+    @classmethod
     def get_element_schema(cls, model, schema=None):
         if isinstance(schema, (list, tuple)):
-            schema = schema[0] if schema else None
-        if schema:
-            return schema
+            schema = next(
+                (item for item in schema if getattr(item, 'id', None)),
+                schema[0] if schema else None)
+        if schema and not getattr(schema, 'id', None):
+            has_meaningful_value = any(
+                getattr(schema, fname, None) not in (None, '', [], ())
+                for fname in getattr(schema, '_fields', {})
+                if fname not in {
+                    'id', 'component', 'create_uid', 'create_date',
+                    'write_uid', 'write_date', 'rec_name', 'model_name'}
+            )
+            if not has_meaningful_value:
+                schema = None
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
-            return cls._build_preview_schema()
+            return cls._build_preview_schema_with_values(schema)
+        if schema:
+            return schema
         return None
 
     @classmethod
@@ -442,10 +483,13 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     def _build_preview_document(
             cls, content, extra_head='', site=None, model_name=None):
         base_url = http_host()
-        base_styles = (
-            '<link rel="stylesheet" '
-            'href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"/>'
-        )
+        base_styles = ''
+        # Inject Tailwind only for standalone element previews.
+        if not site:
+            base_styles = (
+                '<link rel="stylesheet" '
+                'href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"/>'
+            )
         return (
             '<!DOCTYPE html>'
             '<html lang="ca">'
@@ -600,11 +644,6 @@ class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
     component = fields.Many2One('www.element', 'Element')
-    icon = fields.Char('Icon')
-    menu = fields.Many2One(
-        'www.menu', 'Menu',
-        domain=[('parent', '=', None)],
-    )
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
 
