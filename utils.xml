@@ -34,31 +34,31 @@ this repository contains the full copyright notices and license terms. -->
             <field name="model">www.page</field>
         </record>
 
-        <!-- www.component -->
+        <!-- www.element -->
         <record model="ir.ui.view" id="www_component_view_tree">
-            <field name="model">www.component</field>
+            <field name="model">www.element</field>
             <field name="type">tree</field>
-            <field name="name">component_tree</field>
+            <field name="name">element_tree</field>
         </record>
         <record model="ir.ui.view" id="www_component_view_tree_sequence">
-            <field name="model">www.component</field>
+            <field name="model">www.element</field>
             <field name="type">tree</field>
             <field name="priority" eval="20"/>
-            <field name="name">component_tree_sequence</field>
+            <field name="name">element_tree_sequence</field>
         </record>
         <record model="ir.ui.view" id="www_component_view_form">
-            <field name="model">www.component</field>
+            <field name="model">www.element</field>
             <field name="type">form</field>
-            <field name="name">component_form</field>
+            <field name="name">element_form</field>
         </record>
         <record model="ir.ui.view" id="www_component_view_list_form">
-            <field name="model">www.component</field>
+            <field name="model">www.element</field>
             <field name="type">list-form</field>
-            <field name="name">component_form</field>
+            <field name="name">element_form</field>
         </record>
         <record model="ir.action.act_window" id="act_www_component">
-            <field name="name">Components</field>
-            <field name="res_model">www.component</field>
+            <field name="name">Elements</field>
+            <field name="res_model">www.element</field>
         </record>
         <record model="ir.action.act_window.view" id="act_www_component_view1">
             <field name="sequence" eval="10"/>

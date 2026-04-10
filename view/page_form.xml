@@ -21,7 +21,7 @@
             <group id="buttons" col="1" colspan="4">
                 <button name="generate_uri"/>
             </group>
-            <field name="component" colspan="4" mode="list-form,tree,form" height="900"/>
+            <field name="element" colspan="4" mode="list-form,tree,form" height="900"/>
         </page>
         <page string="Preview" id="preview">
             <field name="preview" widget="document" colspan="4" height="900"/>

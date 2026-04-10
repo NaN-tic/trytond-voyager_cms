@@ -30,8 +30,8 @@ class Page(ModelSQL, ModelView):
     main_uri_en = fields.Boolean('Main URI EN')
     uri_ca = fields.Char('URI CA')
     main_uri_ca = fields.Boolean('Main URI CA')
-    component = fields.One2Many(
-        'www.component', 'page', 'Components',
+    element = fields.One2Many(
+        'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
     )
     preview = fields.Function(
@@ -181,7 +181,7 @@ class Page(ModelSQL, ModelView):
 
     @staticmethod
     def _preview_message(message):
-        return Component._build_preview_document(
+        return Element._build_preview_document(
             '<div style="padding: 1rem; color: #666; font-family: sans-serif;">'
             f'{escape(message)}'
             '</div>'
@@ -215,9 +215,9 @@ class Page(ModelSQL, ModelView):
             content = str(rendered or '')
         if not (content or '').strip():
             return cls._preview_message('No preview available.')
-        return Component._ensure_preview_document(content, site=site)
+        return Element._ensure_preview_document(content, site=site)
 
-    @fields.depends('site', 'component', 'name')
+    @fields.depends('site', 'element', 'name')
     def get_preview(self, name=None):
         if not self.site:
             return self._preview_message(
@@ -226,7 +226,7 @@ class Page(ModelSQL, ModelView):
         try:
             return self.render_preview_content(self).encode()
         except Exception as exc:
-            return Component._build_preview_document(
+            return Element._build_preview_document(
                 '<div style="padding: 1rem; font-family: monospace; '
                 'white-space: pre-wrap; color: #b91c1c;">'
                 f'{escape(str(exc) or "Preview not available.")}'
@@ -238,8 +238,9 @@ class Page(ModelSQL, ModelView):
         return f'page-preview-{self.id or "new"}.html'
 
 
-class Component(sequence_ordered(), ModelSQL, ModelView):
-    __name__ = 'www.component'
+class Element(sequence_ordered(), ModelSQL, ModelView):
+    __name__ = 'www.element'
+    _table = 'www_component'
 
     name = fields.Char('Name', required=True)
     model = fields.Many2One('ir.model', 'Model', required=True)
@@ -258,7 +259,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return (
             'data:image/svg+xml,'
             '%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 '
-            'viewBox=%220 0 1200 800%22%3E'
+            'viewBoComponent aleax=%220 0 1200 800%22%3E'
             '%3Crect width=%221200%22 height=%22800%22 fill=%22%23e2e8f0%22/%3E'
             '%3Ctext x=%22600%22 y=%22400%22 text-anchor=%22middle%22 '
             'font-family=%22sans-serif%22 font-size=%2264%22 '
@@ -358,7 +359,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return schema
 
     @classmethod
-    def get_component_schema(cls, model, schema=None):
+    def get_element_schema(cls, model, schema=None):
         if isinstance(schema, (list, tuple)):
             schema = schema[0] if schema else None
         if schema:
@@ -370,8 +371,8 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
-    def get_component_kwargs(cls, model, schema=None):
-        schema = cls.get_component_schema(model, schema)
+    def get_element_kwargs(cls, model, schema=None):
+        schema = cls.get_element_schema(model, schema)
         if not schema:
             return {}
 
@@ -426,49 +427,6 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
             return None
         return module_root / path
 
-    @classmethod
-    def _extract_stylesheet_hrefs(cls, content):
-        hrefs = []
-        pattern = re.compile(
-            r'<link\b[^>]*rel=["\'][^"\']*stylesheet[^"\']*["\'][^>]*href=["\']([^"\']+)["\']'
-            r'|<link\b[^>]*href=["\']([^"\']+)["\'][^>]*rel=["\'][^"\']*stylesheet[^"\']*["\']',
-            re.IGNORECASE)
-        for match in pattern.finditer(content or ''):
-            href = match.group(1) or match.group(2)
-            if href:
-                hrefs.append(href)
-        return hrefs
-
-    @classmethod
-    def _linked_stylesheet_paths(cls, model, content=''):
-        module_root = cls._preview_module_root(model)
-        if not module_root:
-            return []
-
-        paths = []
-        seen = set()
-        for href in cls._extract_stylesheet_hrefs(content):
-            parsed = urlparse(href)
-            if parsed.scheme or parsed.netloc:
-                continue
-            candidates = []
-            candidate = parsed.path.lstrip('/')
-            if candidate:
-                candidates.append(module_root / candidate)
-                candidates.append(module_root / 'static' / Path(candidate).name)
-                candidates.extend(module_root.rglob(Path(candidate).name))
-            for path in candidates:
-                resolved = cls._resolve_preview_asset_path(model, path)
-                if not resolved or not resolved.exists() or resolved.is_dir():
-                    continue
-                key = str(resolved)
-                if key in seen:
-                    continue
-                seen.add(key)
-                paths.append(resolved)
-                break
-        return paths
-
     @staticmethod
     def _uses_tailwind_cdn(content):
         return 'cdn.tailwindcss.com' in (content or '')
@@ -484,9 +442,10 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
     def _build_preview_document(
             cls, content, extra_head='', site=None, model_name=None):
         base_url = http_host()
-        # Always include Tailwind in preview so utility classes render
-        # even for standalone component previews.
-        base_styles = '<script src="https://cdn.tailwindcss.com"></script>'
+        base_styles = (
+            '<link rel="stylesheet" '
+            'href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css"/>'
+        )
         return (
             '<!DOCTYPE html>'
             '<html lang="ca">'
@@ -525,7 +484,7 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
-                **cls.get_component_kwargs(
+                **cls.get_element_kwargs(
                     LayoutModel, layout_component.schema))
         if layout is None:
             return content
@@ -560,20 +519,20 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                     return layout.render()
 
     @classmethod
-    def render_component_content(cls, model_name, schema=None):
+    def render_element_content(cls, model_name, schema=None):
         pool = Pool()
-        ComponentModel = pool.get(model_name)
+        ElementModel = pool.get(model_name)
         with div() as content:
-            tag = ComponentModel(
-                **cls.get_component_kwargs(ComponentModel, schema)
+            tag = ElementModel(
+                **cls.get_element_kwargs(ElementModel, schema)
             ).tag()
             if tag is not None and not getattr(content, 'children', None):
                 content.add(tag)
         return content
 
     @classmethod
-    def render_preview_content(cls, component):
-        site = component.page.site if component.page and component.page.site else None
+    def render_preview_content(cls, element):
+        site = element.page.site if element.page and element.page.site else None
         voyager_context = Transaction().context.get('voyager_context')
         if voyager_context:
             voyager_context = VoyagerContext(
@@ -590,11 +549,11 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
         with Transaction().set_context(
                 voyager_context=voyager_context,
                 voyager_cms_preview=True):
-            rendered = cls.render_component_content(
-                component.model.name, component.schema)
+            rendered = cls.render_element_content(
+                element.model.name, element.schema)
             if site:
                 rendered = cls.render_with_site_layout(
-                    site, rendered, component.page.name or component.name)
+                    site, rendered, element.page.name or element.name)
         if hasattr(rendered, 'render'):
             content = rendered.render()
         else:
@@ -606,9 +565,9 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
                 'No preview available.'
                 '</div>',
                 site=site,
-                model_name=component.model.name)
+                model_name=element.model.name)
         return cls._ensure_preview_document(
-            content, site=site, model_name=component.model.name)
+            content, site=site, model_name=element.model.name)
 
     @fields.depends('model', 'schema')
     def get_preview(self, name=None):
@@ -629,13 +588,18 @@ class Component(sequence_ordered(), ModelSQL, ModelView):
 
     @fields.depends('id')
     def get_preview_filename(self, name=None):
-        return f'component-preview-{self.id or "new"}.html'
+        return f'element-preview-{self.id or "new"}.html'
+
+
+class Component(Element):
+    __name__ = 'www.component'
+    _table = 'www_component'
 
 
 class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
-    component = fields.Many2One('www.component', 'Component')
+    component = fields.Many2One('www.element', 'Element')
     icon = fields.Char('Icon')
     menu = fields.Many2One(
         'www.menu', 'Menu',
@@ -667,13 +631,13 @@ class ContentWrapper(Endpoint):
 
     def render(self):
         pool = Pool()
-        Component = pool.get('www.component')
+        Element = pool.get('www.element')
         layout_component = self.site.layout
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
-                **Component.get_component_kwargs(
+                **Element.get_element_kwargs(
                     LayoutModel, layout_component.schema))
 
         def _render_layout(content, title):
@@ -702,11 +666,11 @@ class ContentWrapper(Endpoint):
             )
 
         with div() as page_content:
-            for component in self.page.component:
-                ComponentModel = pool.get(component.model.name)
-                ComponentModel(
-                    **Component.get_component_kwargs(
-                        ComponentModel, component.schema)
+            for element in self.page.element:
+                ElementModel = pool.get(element.model.name)
+                ElementModel(
+                    **Element.get_element_kwargs(
+                        ElementModel, element.schema)
                 ).tag()
 
         return _render_layout(content=page_content, title=self.page.name)
@@ -723,7 +687,7 @@ class VoyagerURI(metaclass=PoolMeta):
 class VoyagerMenu(metaclass=PoolMeta):
     __name__ = 'www.menu'
 
-    component = fields.Many2One('www.component', 'Component',
+    component = fields.Many2One('www.element', 'Element',
         states={
             'invisible': Eval('type') != 'component',
         },
@@ -732,12 +696,12 @@ class VoyagerMenu(metaclass=PoolMeta):
     @classmethod
     def __setup__(cls):
         super().__setup__()
-        cls.type.selection.append(('component', 'Component'))
+        cls.type.selection.append(('component', 'Element'))
 
 
 class VoyagerSite(metaclass=PoolMeta):
     __name__ = 'www.site'
 
-    header = fields.Many2One('www.component', 'Header')
-    footer = fields.Many2One('www.component', 'Footer')
-    layout = fields.Many2One('www.component', 'Layout')
+    header = fields.Many2One('www.element', 'Header')
+    footer = fields.Many2One('www.element', 'Footer')
+    layout = fields.Many2One('www.element', 'Layout')
