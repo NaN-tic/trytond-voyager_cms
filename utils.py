@@ -389,24 +389,17 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
 
     @classmethod
     def get_element_schema(cls, model, schema=None):
+        provided_schema = schema is not None
         if isinstance(schema, (list, tuple)):
             schema = next(
                 (item for item in schema if getattr(item, 'id', None)),
                 schema[0] if schema else None)
-        if schema and not getattr(schema, 'id', None):
-            has_meaningful_value = any(
-                getattr(schema, fname, None) not in (None, '', [], ())
-                for fname in getattr(schema, '_fields', {})
-                if fname not in {
-                    'id', 'component', 'create_uid', 'create_date',
-                    'write_uid', 'write_date', 'rec_name', 'model_name'}
-            )
-            if not has_meaningful_value:
-                schema = None
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
             return cls._build_preview_schema_with_values(schema)
+        if provided_schema:
+            return schema
         if schema:
             return schema
         return None
@@ -635,7 +628,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return f'element-preview-{self.id or "new"}.html'
 
 
-class Component(Element):
+class Component(ModelSQL, ModelView):
     __name__ = 'www.component'
     _table = 'www_component'
 
