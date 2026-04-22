@@ -6,6 +6,8 @@
             <newline/>
             <label name="name"/>
             <field name="name"/>
+            <label name="sequence"/>
+            <field name="sequence"/>
             <label name="model"/>
             <field name="model"/>
             <newline/>

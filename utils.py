@@ -60,6 +60,50 @@ class Page(ModelSQL, ModelView):
             if uri_value and not values.get(field_name):
                 values[field_name] = uri_value
 
+    @fields.depends('name', 'uri_es', 'uri_en', 'uri_ca')
+    def on_change_name(self):
+        values = {
+            'uri_es': self.uri_es,
+            'uri_en': self.uri_en,
+            'uri_ca': self.uri_ca,
+        }
+        self._fill_uri_fields(values, self.name)
+        for code in LANGS:
+            setattr(self, f'uri_{code}', values.get(f'uri_{code}'))
+
+    def _set_main_uri_and_fill(self, main_code):
+        values = {
+            'uri_es': self.uri_es,
+            'uri_en': self.uri_en,
+            'uri_ca': self.uri_ca,
+        }
+        self._fill_uri_fields(values, self.name)
+        for code in LANGS:
+            setattr(self, f'uri_{code}', values.get(f'uri_{code}'))
+            if code != main_code:
+                setattr(self, f'main_uri_{code}', False)
+
+    @fields.depends(
+        'name', 'uri_es', 'uri_en', 'uri_ca',
+        'main_uri_es', 'main_uri_en', 'main_uri_ca')
+    def on_change_main_uri_es(self):
+        if self.main_uri_es:
+            self._set_main_uri_and_fill('es')
+
+    @fields.depends(
+        'name', 'uri_es', 'uri_en', 'uri_ca',
+        'main_uri_es', 'main_uri_en', 'main_uri_ca')
+    def on_change_main_uri_en(self):
+        if self.main_uri_en:
+            self._set_main_uri_and_fill('en')
+
+    @fields.depends(
+        'name', 'uri_es', 'uri_en', 'uri_ca',
+        'main_uri_es', 'main_uri_en', 'main_uri_ca')
+    def on_change_main_uri_ca(self):
+        if self.main_uri_ca:
+            self._set_main_uri_and_fill('ca')
+
     @classmethod
     def create(cls, vlist):
         vlist = [values.copy() for values in vlist]
@@ -124,6 +168,12 @@ class Page(ModelSQL, ModelView):
         }
 
         for page in pages:
+            if not page.site:
+                raise UserError(
+                    _('nantic.msg_page_generate_uri_missing_site',
+                        page=page.rec_name)
+                )
+
             resource_ref = f'{page.__name__},{page.id}'
 
             existing_uris = {
