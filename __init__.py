@@ -8,7 +8,6 @@ def register():
     Pool.register(
         utils.Page,
         utils.Element,
-        utils.Component,
         utils.Schema,
         utils.ContentWrapper,
         utils.VoyagerURI,

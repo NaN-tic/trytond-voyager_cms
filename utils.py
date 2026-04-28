@@ -1,8 +1,6 @@
-import inspect
 import re
 from datetime import date
 from html import escape
-from pathlib import Path
 from urllib.parse import urlparse
 
 from dominate.tags import div
@@ -17,6 +15,8 @@ from trytond.transaction import Transaction
 from trytond.url import http_host
 
 LANGS = ['es', 'en', 'ca']
+
+DEFAULT_BACKGROUND_COLOR = '#F8FAFC'
 
 
 class Page(ModelSQL, ModelView):
@@ -336,21 +336,25 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if 'icon' in field_name:
             return 'M12 4v16m8-8H4'
         if 'color' in field_name:
-            return 'bg-slate-50'
+            return DEFAULT_BACKGROUND_COLOR
         return f'Preview {string}'.strip()
 
     @classmethod
     def _preview_selection_value(cls, field_name, field):
         options = getattr(field, 'selection', None) or []
-        preferred_by_name = {
-            'background_hue': 'slate',
-            'background_color': 'bg-slate-50',
-        }
-        preferred = preferred_by_name.get(field_name)
-        values = [value for value, _label in options if value not in (None, '')]
-        if preferred in values:
-            return preferred
-        return values[0] if values else None
+        if isinstance(options, str):
+            selection_getter = getattr(cls, options, None)
+            if callable(selection_getter):
+                try:
+                    options = selection_getter()
+                except TypeError:
+                    options = []
+        values = []
+        for option in options or []:
+            value = option[0] if isinstance(option, (list, tuple)) else option
+            if value not in (None, ''):
+                values.append(value)
+        return values[0] if values else ''
 
     @classmethod
     def _preview_value_for_field(cls, field_name, field):
@@ -384,11 +388,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if numeric_types and isinstance(field, numeric_types):
             return 3
         if isinstance(field, (fields.Char, fields.Text)):
-            if 'image' in field_name and (
-                    'url' in field_name or 'src' in field_name):
-                return cls._preview_image()
-            if field_name == 'items_json':
-                return '[]'
             return cls._preview_text_value(field_name, field)
         return None
 
@@ -402,13 +401,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             if field_name in {
                     'component', 'id', 'create_uid', 'create_date',
                     'write_uid', 'write_date', 'rec_name', 'model_name'}:
-                continue
-            lower_name = field_name.lower()
-            if not include_visual and (
-                    'color' in lower_name
-                    or 'hue' in lower_name
-                    or ('image' in lower_name and (
-                        'url' in lower_name or 'src' in lower_name))):
                 continue
             value = cls._preview_value_for_field(field_name, field)
             if value is not None:
@@ -464,63 +456,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if 'schema' in model._fields:
             kwargs['schema'] = schema
         return kwargs
-
-    @classmethod
-    def _preview_asset_models(cls, site=None, model_name=None):
-        pool = Pool()
-        models = []
-        seen = set()
-
-        for name in filter(None, [
-                    getattr(
-                        getattr(getattr(site, 'layout', None), 'model', None),
-                        'name', None),
-                    getattr(
-                        getattr(getattr(site, 'header', None), 'model', None),
-                        'name', None),
-                    getattr(
-                        getattr(getattr(site, 'footer', None), 'model', None),
-                        'name', None),
-                    model_name]):
-            if name in seen:
-                continue
-            seen.add(name)
-            models.append(pool.get(name))
-        return models
-
-    @staticmethod
-    def _preview_module_root(model):
-        try:
-            module_path = Path(inspect.getfile(model)).resolve()
-        except (OSError, TypeError):
-            return None
-
-        for path in module_path.parents:
-            if path.parent.name == 'modules':
-                return path
-        return None
-
-    @classmethod
-    def _resolve_preview_asset_path(cls, model, asset_path):
-        path = Path(asset_path)
-        if path.is_absolute():
-            return path
-
-        module_root = cls._preview_module_root(model)
-        if not module_root:
-            return None
-        return module_root / path
-
-    @staticmethod
-    def _uses_tailwind_cdn(content):
-        return 'cdn.tailwindcss.com' in (content or '')
-
-    @classmethod
-    def _module_output_css_paths(cls, model):
-        module_root = cls._preview_module_root(model)
-        if not module_root:
-            return []
-        return sorted(module_root.rglob('output.css'))
 
     @classmethod
     def _build_preview_document(
@@ -676,11 +611,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     @fields.depends('id')
     def get_preview_filename(self, name=None):
         return f'element-preview-{self.id or "new"}.html'
-
-
-class Component(ModelSQL, ModelView):
-    __name__ = 'www.component'
-    _table = 'www_component'
 
 
 class Schema(ModelSQL, ModelView):
