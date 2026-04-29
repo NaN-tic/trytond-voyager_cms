@@ -51,6 +51,11 @@ this repository contains the full copyright notices and license terms. -->
             <field name="type">form</field>
             <field name="name">element_form</field>
         </record> -->
+        <record model="ir.ui.view" id="www_element_view_form">
+            <field name="model">www.element</field>
+            <field name="type">form</field>
+            <field name="name">element_form</field>
+        </record>
         <record model="ir.ui.view" id="www_component_view_list_form">
             <field name="model">www.element</field>
             <field name="type">list-form</field>
@@ -67,7 +72,7 @@ this repository contains the full copyright notices and license terms. -->
         </record>
         <record model="ir.action.act_window.view" id="act_www_element_view_form">
             <field name="sequence" eval="20"/>
-            <field name="view" ref="www_component_view_list_form"/>
+            <field name="view" ref="www_element_view_form"/>
             <field name="act_window" ref="act_www_component"/>
         </record>
 

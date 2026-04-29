@@ -439,7 +439,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
-            return cls._build_preview_schema_with_values(schema)
+            if schema:
+                return schema
+            return cls._build_preview_schema()
         if provided_schema:
             return schema
         if schema:
