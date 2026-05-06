@@ -4,6 +4,7 @@ from html import escape
 from urllib.parse import urlparse
 
 from dominate.tags import div
+from dominate.util import raw
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
@@ -498,11 +499,13 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             content, site=site, model_name=model_name)
 
     @classmethod
-    def render_with_site_layout(cls, site, content, title):
+    def render_with_site_layout(
+            cls, site, content, title, preview_chrome=False):
         if not site:
             return content
 
         pool = Pool()
+        Element = pool.get('www.element')
         layout_component = getattr(site, 'layout', None)
         layout = None
         if layout_component and layout_component.model:
@@ -510,8 +513,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             layout = LayoutModel(
                 **cls.get_element_kwargs(
                     LayoutModel, layout_component.schema))
-        if layout is None:
-            return content
         voyager_context = Transaction().context.get('voyager_context')
         if voyager_context:
             voyager_context = VoyagerContext(
@@ -526,13 +527,49 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         else:
             voyager_context = VoyagerContext(site=site)
         with Transaction().set_context(voyager_context=voyager_context):
+            if site and not preview_chrome:
+                with div() as wrapped:
+                    header_component = getattr(site, 'header', None)
+                    if header_component and header_component.model:
+                        try:
+                            HeaderModel = pool.get(header_component.model.name)
+                            HeaderModel(**Element.get_element_kwargs(
+                                HeaderModel, header_component.schema)).tag()
+                        except Exception:
+                            pass
+
+                    if content:
+                        if hasattr(content, 'render'):
+                            wrapped.add(content)
+                        else:
+                            raw(str(content))
+
+                    footer_component = getattr(site, 'footer', None)
+                    if footer_component and footer_component.model:
+                        try:
+                            FooterModel = pool.get(footer_component.model.name)
+                            FooterModel(**Element.get_element_kwargs(
+                                FooterModel, footer_component.schema)).tag()
+                        except Exception:
+                            try:
+                                pool.get('www.footer')().tag()
+                            except Exception:
+                                pass
+                    else:
+                        try:
+                            pool.get('www.footer')().tag()
+                        except Exception:
+                            pass
+                content = wrapped
+            if layout is None:
+                return content
             try:
-                return layout.render(content=content, title=title)
+                rendered = layout.render(content=content, title=title)
             except TypeError as exc:
                 if "unexpected keyword argument 'content'" not in str(exc):
                     raise
                 try:
-                    return layout.render(content, title=title)
+                    rendered = layout.render(content, title=title)
                 except TypeError as nested_exc:
                     if "unexpected keyword argument 'title'" not in str(nested_exc):
                         raise
@@ -540,7 +577,8 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                         layout.main.add(content)
                     if hasattr(layout, 'title'):
                         layout.title = title
-                    return layout.render()
+                    rendered = layout.render()
+        return rendered
 
     @classmethod
     def render_element_content(cls, model_name, schema=None):
@@ -576,8 +614,10 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             rendered = cls.render_element_content(
                 element.model.name, element.schema)
             if site:
+                # element sense header footer
                 rendered = cls.render_with_site_layout(
-                    site, rendered, element.page.name or element.name)
+                    site, rendered, element.page.name or element.name,
+                    preview_chrome=True)
         if hasattr(rendered, 'render'):
             content = rendered.render()
         else:
@@ -655,6 +695,40 @@ class ContentWrapper(Endpoint):
                     LayoutModel, layout_component.schema))
 
         def _render_layout(content, title):
+            if self.site:
+                with div() as wrapped:
+                    header_component = getattr(self.site, 'header', None)
+                    if header_component and header_component.model:
+                        try:
+                            HeaderModel = pool.get(header_component.model.name)
+                            HeaderModel(**Element.get_element_kwargs(
+                                HeaderModel, header_component.schema)).tag()
+                        except Exception:
+                            pass
+
+                    if content:
+                        if hasattr(content, 'render'):
+                            wrapped.add(content)
+                        else:
+                            raw(str(content))
+
+                    footer_component = getattr(self.site, 'footer', None)
+                    if footer_component and footer_component.model:
+                        try:
+                            FooterModel = pool.get(footer_component.model.name)
+                            FooterModel(**Element.get_element_kwargs(
+                                FooterModel, footer_component.schema)).tag()
+                        except Exception:
+                            try:
+                                pool.get('www.footer')().tag()
+                            except Exception:
+                                pass
+                    else:
+                        try:
+                            pool.get('www.footer')().tag()
+                        except Exception:
+                            pass
+                content = wrapped
             if layout is None:
                 return content.render()
             try:

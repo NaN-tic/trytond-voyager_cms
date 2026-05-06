@@ -1,4 +1,4 @@
-<tree sequence="sequence" editable="1">
+<tree sequence="sequence" editable="0">
     <field name="name"/>
     <field name="model"/>
     <field name="page"/>

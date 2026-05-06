@@ -57,7 +57,8 @@ this repository contains the full copyright notices and license terms. -->
             <field name="name">element_form</field>
         </record>
         <record model="ir.ui.view" id="www_component_view_list_form">
-            <field name="model">www.element</field>
+            <field name=
+            "model">www.element</field>
             <field name="type">list-form</field>
             <field name="name">element_form</field>
         </record>
