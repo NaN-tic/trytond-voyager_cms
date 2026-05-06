@@ -8,6 +8,8 @@
         <field name="header"/>
         <label name="footer"/>
         <field name="footer"/>
+        <label name="langs"/>
+        <field name="langs" colspan="4" mode="tree,form" height="200"/>
         <newline/>
     </xpath>
 </data>

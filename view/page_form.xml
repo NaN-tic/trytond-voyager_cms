@@ -5,26 +5,16 @@
             <field name="name" xexpand="1" xfill="1"/>
             <label name="site" xalign="0.0"/>
             <field name="site" xexpand="1" xfill="1"/>
-            <label name="uri_es" xalign="0.0"/>
-            <field name="uri_es" xexpand="1" xfill="1"/>
-            <label name="main_uri_es" xalign="0.0" xexpand="0" xfill="0"/>
-            <field name="main_uri_es" xexpand="0" xfill="0"/>
-            <label name="uri_en" xalign="0.0"/>
-            <field name="uri_en" xexpand="1" xfill="1"/>
-            <label name="main_uri_en" xalign="0.0" xexpand="0" xfill="0"/>
-            <field name="main_uri_en" xexpand="0" xfill="0"/>
-            <label name="uri_ca" xalign="0.0"/>
-            <field name="uri_ca" xexpand="1" xfill="1"/>
-            <label name="main_uri_ca" xalign="0.0" xexpand="0" xfill="0"/>
-            <field name="main_uri_ca" xexpand="0" xfill="0"/>
-
-            <group id="buttons" col="1" colspan="4">
-                <button name="generate_uri"/>
-            </group>
             <field name="element" colspan="4" mode="tree,list-form,form" height="900"/>
         </page>
         <page string="Preview" id="preview">
             <field name="preview" widget="document" colspan="4" height="900"/>
+        </page>
+        <page string="Uris" id="uris">
+            <field name="uris" colspan="4" mode="tree,form" height="250"/>
+            <group id="buttons" col="1" colspan="4">
+                <button name="generate_uri"/>
+            </group>
         </page>
     </notebook>
 </form>

@@ -7,10 +7,12 @@ from . import utils
 def register():
     Pool.register(
         utils.Page,
+        utils.PageURI,
         utils.Element,
         utils.Schema,
         utils.ContentWrapper,
         utils.VoyagerURI,
         utils.VoyagerMenu,
+        utils.SiteLang,
         utils.VoyagerSite,
         module='voyager_cms', type_='model')

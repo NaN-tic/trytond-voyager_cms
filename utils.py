@@ -1,19 +1,22 @@
-import re
 from datetime import date
-from html import escape
-from urllib.parse import urlparse
+from pathlib import Path
+from xml.sax.saxutils import escape
 
 from dominate.tags import div
 from dominate.util import raw
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
+from slugify import slugify
+
 from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
-from trytond.modules.voyager.voyager import Endpoint, VoyagerContext
 from trytond.pool import Pool, PoolMeta
+from trytond.exceptions import UserError
+from trytond.i18n import gettext
+from trytond.modules.voyager.voyager import Endpoint, VoyagerContext
 from trytond.pyson import Eval
-from trytond.tools import slugify
 from trytond.transaction import Transaction
 from trytond.url import http_host
+from werkzeug.wrappers import Response
 
 LANGS = ['es', 'en', 'ca']
 
@@ -25,12 +28,10 @@ class Page(ModelSQL, ModelView):
 
     name = fields.Char('Name', required=True)
     site = fields.Many2One('www.site', 'Site', required=True)
-    uri_es = fields.Char('URI ES')
-    main_uri_es = fields.Boolean('Main URI ES')
-    uri_en = fields.Char('URI EN')
-    main_uri_en = fields.Boolean('Main URI EN')
-    uri_ca = fields.Char('URI CA')
-    main_uri_ca = fields.Boolean('Main URI CA')
+    uris = fields.One2Many(
+        'www.page.uri', 'page', 'URIs',
+        order=[('id', 'ASC')],
+    )
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
@@ -42,83 +43,114 @@ class Page(ModelSQL, ModelView):
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
 
-    @staticmethod
-    def _uris_from_name(name):
+    @classmethod
+    def _uri_from_name(cls, name, code):
         if not name:
-            return (None, None, None)
-        base = slugify(name)
-        if base:
-            base = base.lower()
+            return None
+        base = name.lower().replace(' ', '-').replace('/', '-')
         if not base:
-            return (None, None, None)
-        return (f'/es/{base}', f'/en/{base}', f'/ca/{base}')
+            return None
+        return f'/{code}/{base}'
 
     @classmethod
-    def _fill_uri_fields(cls, values, name):
-        uri_es, uri_en, uri_ca = cls._uris_from_name(name)
-        for code, uri_value in zip(LANGS, (uri_es, uri_en, uri_ca)):
-            field_name = f'uri_{code}'
-            if uri_value and not values.get(field_name):
-                values[field_name] = uri_value
+    def _default_uris(cls, name, site=None):
+        langs = LANGS
+        if site and hasattr(site, 'id') and site.id:
+            try:
+                pool = Pool()
+                SiteLang = pool.get('www.site.lang')
+                site_langs = SiteLang.search([('site', '=', site.id)])
+                if site_langs:
+                    langs = [sl.language.code for sl in site_langs]
+            except Exception:
+                pass
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        languages = {
+            lang.code: lang
+            for lang in Lang.search([('code', 'in', langs)])
+        }
+        uris = []
+        for code in langs:
+            language = languages.get(code)
+            if not language:
+                continue
+            uris.append({
+                'language': language.id,
+                'uri': cls._uri_from_name(name, code),
+            })
+        return uris
 
-    @fields.depends('name', 'uri_es', 'uri_en', 'uri_ca')
+    @classmethod
+    def _fill_uris(cls, uris, name, site=None):
+        langs = LANGS
+        if site and hasattr(site, 'id') and site.id:
+            try:
+                pool = Pool()
+                SiteLang = pool.get('www.site.lang')
+                site_langs = SiteLang.search([('site', '=', site.id)])
+                if site_langs:
+                    langs = [sl.language.code for sl in site_langs]
+            except Exception:
+                pass
+        changed = []
+        for uri in uris or []:
+            language = getattr(uri, 'language', None)
+            if not language or uri.uri:
+                continue
+            if language.code not in langs:
+                continue
+            uri.uri = cls._uri_from_name(name, language.code)
+            changed.append(uri)
+        return changed
+
+    @fields.depends('name', 'site')
     def on_change_name(self):
-        values = {
-            'uri_es': self.uri_es,
-            'uri_en': self.uri_en,
-            'uri_ca': self.uri_ca,
-        }
-        self._fill_uri_fields(values, self.name)
-        for code in LANGS:
-            setattr(self, f'uri_{code}', values.get(f'uri_{code}'))
-
-    def _set_main_uri_and_fill(self, main_code):
-        values = {
-            'uri_es': self.uri_es,
-            'uri_en': self.uri_en,
-            'uri_ca': self.uri_ca,
-        }
-        self._fill_uri_fields(values, self.name)
-        for code in LANGS:
-            setattr(self, f'uri_{code}', values.get(f'uri_{code}'))
-            if code != main_code:
-                setattr(self, f'main_uri_{code}', False)
-
-    @fields.depends(
-        'name', 'uri_es', 'uri_en', 'uri_ca',
-        'main_uri_es', 'main_uri_en', 'main_uri_ca')
-    def on_change_main_uri_es(self):
-        if self.main_uri_es:
-            self._set_main_uri_and_fill('es')
-
-    @fields.depends(
-        'name', 'uri_es', 'uri_en', 'uri_ca',
-        'main_uri_es', 'main_uri_en', 'main_uri_ca')
-    def on_change_main_uri_en(self):
-        if self.main_uri_en:
-            self._set_main_uri_and_fill('en')
-
-    @fields.depends(
-        'name', 'uri_es', 'uri_en', 'uri_ca',
-        'main_uri_es', 'main_uri_en', 'main_uri_ca')
-    def on_change_main_uri_ca(self):
-        if self.main_uri_ca:
-            self._set_main_uri_and_fill('ca')
+        if not self.uris:
+            self.uris = self._default_uris(self.name, self.site)
+        else:
+            self._fill_uris(self.uris, self.name, self.site)
 
     @classmethod
     def create(cls, vlist):
         vlist = [values.copy() for values in vlist]
-        for values in vlist:
-            if values.get('name'):
-                cls._fill_uri_fields(values, values['name'])
-        return super().create(vlist)
+        pages = super().create(vlist)
+        cls._create_default_uris(pages)
+        return pages
+
+    @classmethod
+    def _create_default_uris(cls, pages):
+        if not pages:
+            return
+        pool = Pool()
+        PageURI = pool.get('www.page.uri')
+        to_create = []
+        for page in pages:
+            if page.uris:
+                continue
+            to_create.extend({
+                'page': page.id,
+                'language': uri.language.id,
+                'uri': uri.uri,
+            } for uri in cls._default_uris(page.name, page.site))
+        if to_create:
+            PageURI.create(to_create)
 
     @classmethod
     def write(cls, pages, values, *args):
         values = values.copy()
-        if values.get('name'):
-            cls._fill_uri_fields(values, values['name'])
-        return super().write(pages, values, *args)
+        super().write(pages, values, *args)
+        pages_without_uris = [page for page in pages if not page.uris]
+        if pages_without_uris:
+            cls._create_default_uris(pages_without_uris)
+        if 'name' in values:
+            pool = Pool()
+            PageURI = pool.get('www.page.uri')
+            changed = []
+            for page in pages:
+                changed.extend(cls._fill_uris(page.uris, page.name, page.site))
+            if changed:
+                PageURI.save(changed)
 
     @classmethod
     def __setup__(cls):
@@ -134,14 +166,10 @@ class Page(ModelSQL, ModelView):
             page.check_main_uri()
 
     def check_main_uri(self):
-        if sum((
-            bool(self.main_uri_es),
-            bool(self.main_uri_en),
-            bool(self.main_uri_ca),
-        )) > 1:
+        if sum(bool(uri.main_uri) for uri in self.uris) > 1:
             raise UserError(
-                _('nantic.msg_page_main_uri_unique',
-                    page=self.rec_name)
+                gettext('voyager_cms.msg_page_main_uri_unique',
+                  page=self.rec_name)
             )
 
     @classmethod
@@ -149,8 +177,8 @@ class Page(ModelSQL, ModelView):
     def generate_uri(cls, pages):
         pool = Pool()
         URI = pool.get('www.uri')
-        Lang = pool.get('ir.lang')
         Model = pool.get('ir.model')
+        SiteLang = pool.get('www.site.lang')
 
         endpoint_model = Model.search(
             [('name', '=', 'www.content.wrapper')],
@@ -158,24 +186,26 @@ class Page(ModelSQL, ModelView):
         )
         if not endpoint_model:
             raise UserError(
-                _('nantic.msg_page_generate_uri_missing_endpoint')
+                gettext('voyager_cms.msg_page_generate_uri_missing_endpoint')
             )
 
         endpoint = endpoint_model[0]
 
-        languages = {
-            lang.code: lang
-            for lang in Lang.search([('code', 'in', LANGS)])
-        }
-
         for page in pages:
             if not page.site:
                 raise UserError(
-                    _('nantic.msg_page_generate_uri_missing_site',
-                        page=page.rec_name)
+                    gettext('voyager_cms.msg_page_generate_uri_missing_site',
+                      page=page.rec_name)
                 )
-
             resource_ref = f'{page.__name__},{page.id}'
+
+            if not page.uris:
+                cls._create_default_uris([page])
+                page = cls.search([('id', '=', page.id)], limit=1)[0]
+
+            changed = cls._fill_uris(page.uris, page.name, page.site)
+            if changed:
+                pool.get('www.page.uri').save(changed)
 
             existing_uris = {
                 (uri.uri, uri.language.code if uri.language else None): uri
@@ -186,21 +216,24 @@ class Page(ModelSQL, ModelView):
             }
 
             new_uris = []
-            main_code = None
+            main_uri = None
 
-            for code in LANGS:
-                if getattr(page, f'main_uri_{code}'):
-                    main_code = code
-
-            uri_by_code = {}
-
-            for code in LANGS:
-                uri_value = getattr(page, f'uri_{code}')
-                if not uri_value:
+            for uri_row in page.uris:
+                if not uri_row.uri or not uri_row.language:
+                    continue
+                code = uri_row.language.code
+                site_langs = LANGS
+                if page.site and hasattr(page.site, 'id') and page.site.id:
+                    try:
+                        site_lang_records = SiteLang.search([('site', '=', page.site.id)])
+                        if site_lang_records:
+                            site_langs = [sl.language.code for sl in site_lang_records]
+                    except Exception:
+                        pass
+                if code not in site_langs:
                     continue
 
-                lang = languages.get(code)
-                key = (uri_value, code)
+                key = (uri_row.uri, code)
 
                 if key in existing_uris:
                     uri = existing_uris.pop(key)
@@ -209,14 +242,13 @@ class Page(ModelSQL, ModelView):
                     uri.resource = resource_ref
 
                 uri.site = page.site
-                uri.uri = uri_value
-                uri.language = lang
+                uri.uri = uri_row.uri
+                uri.language = uri_row.language
                 uri.endpoint = endpoint
 
                 new_uris.append(uri)
-                uri_by_code[code] = uri
-
-            main_uri = uri_by_code.get(main_code) if main_code else None
+                if uri_row.main_uri:
+                    main_uri = uri
 
             for uri in new_uris:
                 if uri is main_uri:
@@ -287,6 +319,38 @@ class Page(ModelSQL, ModelView):
     @fields.depends('id')
     def get_preview_filename(self, name=None):
         return f'page-preview-{self.id or "new"}.html'
+
+
+class PageURI(ModelSQL, ModelView):
+    __name__ = 'www.page.uri'
+
+    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE')
+    language = fields.Many2One('ir.lang', 'Idioma', required=True)
+    uri = fields.Char('URI')
+    main_uri = fields.Boolean('Main URI')
+
+    @fields.depends('page', 'language', 'uri', '_parent_page.name')
+    def on_change_language(self):
+        if self.uri or not self.language:
+            return
+        name = None
+        if self.page and self.page.name:
+            name = self.page.name
+        if not name:
+            return
+        self.uri = Page._uri_from_name(name, self.language.code)
+
+    @fields.depends('page', 'main_uri')
+    def on_change_main_uri(self):
+        if not self.main_uri or not self.page or not self.page.uris:
+            return
+        for uri in self.page.uris:
+            if uri is not self:
+                uri.main_uri = False
+
+    def get_rec_name(self, name):
+        language = self.language.code if self.language else ''
+        return f'{language}: {self.uri or ""}'.strip(': ')  
 
 
 class Element(sequence_ordered(), ModelSQL, ModelView):
@@ -659,6 +723,7 @@ class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
     component = fields.Many2One('www.element', 'Element')
+    icon = fields.Char('Icon')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
 
@@ -787,9 +852,17 @@ class VoyagerMenu(metaclass=PoolMeta):
         cls.type.selection.append(('component', 'Element'))
 
 
+class SiteLang(ModelSQL):
+    __name__ = 'www.site.lang'
+
+    site = fields.Many2One('www.site', 'Site', required=True)
+    language = fields.Many2One('ir.lang', 'Language', required=True)
+
+
 class VoyagerSite(metaclass=PoolMeta):
     __name__ = 'www.site'
 
     header = fields.Many2One('www.element', 'Header')
     footer = fields.Many2One('www.element', 'Footer')
     layout = fields.Many2One('www.element', 'Layout')
+    langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
