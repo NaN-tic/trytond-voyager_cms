@@ -1,0 +1,10 @@
+<form>
+    <label name="page"/>
+    <field name="page"/>
+    <label name="language"/>
+    <field name="language"/>
+    <label name="uri"/>
+    <field name="uri"/>
+    <label name="main_uri"/>
+    <field name="main_uri"/>
+</form>

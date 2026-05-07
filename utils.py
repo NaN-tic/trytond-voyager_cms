@@ -6,14 +6,14 @@ from dominate.tags import div
 from dominate.util import raw
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
-from slugify import slugify
 
 from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
 from trytond.pool import Pool, PoolMeta
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
-from trytond.modules.voyager.voyager import Endpoint, VoyagerContext
+from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Eval
+from trytond.tools import slugify
 from trytond.transaction import Transaction
 from trytond.url import http_host
 from werkzeug.wrappers import Response
@@ -104,7 +104,7 @@ class Page(ModelSQL, ModelView):
             changed.append(uri)
         return changed
 
-    @fields.depends('name', 'site')
+    @fields.depends('name', 'site', 'uris')
     def on_change_name(self):
         if not self.uris:
             self.uris = self._default_uris(self.name, self.site)
@@ -723,15 +723,61 @@ class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
     component = fields.Many2One('www.element', 'Element')
-    icon = fields.Char('Icon')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
+    visible_fields = fields.Function(
+        fields.MultiSelection('get_schema_fields', 'Visible Fields'),
+        'on_change_with_visible_fields')
+    # schema extensions hide the rest inline with:
+    # states={'invisible': ~Eval('visible_fields', []).contains('field_name')}
+    # depends=['visible_fields']
+
+    @classmethod
+    def _schema_content_fields(cls):
+        return [
+            name for name, field in cls._fields.items()
+            if 'visible_fields' in (getattr(field, 'depends', []) or [])
+            ]
+
+    @classmethod
+    def get_schema_fields(cls):
+        return [(name, cls._fields[name].string or name)
+            for name in cls._schema_content_fields()]
+
+    @classmethod
+    def _schema_fields_for_model(cls, model_name):
+        content_fields = cls._schema_content_fields()
+        if not model_name:
+            return content_fields
+
+        try:
+            component = Pool().get(model_name)
+        except Exception:
+            return content_fields
+        fields_ = getattr(component, '__fields__', None)
+        if callable(fields_):
+            fields_ = fields_()
+        if isinstance(fields_, str):
+            fields_ = [fields_]
+        fields_ = [name for name in (fields_ or []) if name in content_fields]
+        if 'background' in content_fields and 'background' not in fields_:
+            fields_.append('background')
+        if fields_:
+            return fields_
+        return content_fields
 
     @fields.depends('component', '_parent_component.model')
     def on_change_with_model_name(self, name=None):
         if self.component and self.component.model:
             return self.component.model.name
         return None
+
+    @fields.depends('component', '_parent_component.model')
+    def on_change_with_visible_fields(self, name=None):
+        model_name = None
+        if self.component and self.component.model:
+            model_name = self.component.model.name
+        return self._schema_fields_for_model(model_name)
 
 
 class ContentWrapper(Endpoint):
@@ -866,3 +912,7 @@ class VoyagerSite(metaclass=PoolMeta):
     footer = fields.Many2One('www.element', 'Footer')
     layout = fields.Many2One('www.element', 'Layout')
     langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
+
+
+class ComponentCMS(Component):
+    __fields__ = []
