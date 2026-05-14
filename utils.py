@@ -7,7 +7,7 @@ from dominate.util import raw
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 
-from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
+from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
 from trytond.pool import Pool, PoolMeta
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
@@ -21,20 +21,39 @@ from werkzeug.wrappers import Response
 LANGS = ['es', 'en', 'ca']
 
 DEFAULT_BACKGROUND_COLOR = '#F8FAFC'
+_PAGE_STATES = {'readonly': Eval('state') != 'draft'}
+_PAGE_DEPENDS = ['state']
+_CHILD_PAGE_STATES = {'readonly': Eval('_parent_page', {}).get('state') != 'draft'}
+_CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
+CHILD_PAGES_STATES = {'readonly': Eval('page_state') != 'draft'}
+CHILD_PAGES_DEPENDS = ['page_state']
+CHILD_PAGES_DEFENDS = CHILD_PAGES_DEPENDS
 
 
-class Page(ModelSQL, ModelView):
+class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
-    name = fields.Char('Name', required=True)
-    site = fields.Many2One('www.site', 'Site', required=True)
+    name = fields.Char('Name', required=True,
+        states=_PAGE_STATES, depends=_PAGE_DEPENDS)
+    site = fields.Many2One('www.site', 'Site', required=True,
+        states=_PAGE_STATES, depends=_PAGE_DEPENDS)
+    origin_page = fields.Many2One(
+        'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
+    published_page = fields.Many2One(
+        'www.page', 'Published Page', readonly=True, ondelete='SET NULL')
+    state = fields.Selection([
+            ('draft', 'Draft'),
+            ('published', 'Published'),
+            ], 'State', readonly=True, required=True, sort=False)
     uris = fields.One2Many(
         'www.page.uri', 'page', 'URIs',
         order=[('id', 'ASC')],
+        states=_PAGE_STATES, depends=_PAGE_DEPENDS,
     )
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
+        states=_PAGE_STATES, depends=_PAGE_DEPENDS,
     )
     preview = fields.Function(
         fields.Binary('Page Preview', filename='preview_filename'),
@@ -43,17 +62,43 @@ class Page(ModelSQL, ModelView):
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
 
+    @staticmethod
+    def default_state():
+        return 'draft'
+
     @classmethod
-    def _uri_from_name(cls, name, code):
+    def _delete_generated_uris(cls, pages):
+        if not pages:
+            return
+        pool = Pool()
+        URI = pool.get('www.uri')
+        resources = [f'{page.__name__},{page.id}' for page in pages if page.id]
+        if resources:
+            uris = URI.search([
+                    ('resource', 'in', resources),
+                    ])
+            if uris:
+                URI.delete(uris)
+
+    @classmethod
+    def _state_uri_prefix(cls, state):
+        state = state or 'draft'
+        if state == 'published':
+            return ''
+        return f'/{state}'
+
+    @classmethod
+    def _uri_from_name(cls, name, code, state='published'):
         if not name:
             return None
         base = name.lower().replace(' ', '-').replace('/', '-')
         if not base:
             return None
-        return f'/{code}/{base}'
+        prefix = cls._state_uri_prefix(state)
+        return f'{prefix}/{code}/{base}'
 
     @classmethod
-    def _default_uris(cls, name, site=None):
+    def _default_uris(cls, name, site=None, state='published'):
         langs = LANGS
         if site and hasattr(site, 'id') and site.id:
             try:
@@ -77,12 +122,12 @@ class Page(ModelSQL, ModelView):
                 continue
             uris.append({
                 'language': language.id,
-                'uri': cls._uri_from_name(name, code),
+                'uri': cls._uri_from_name(name, code, state=state),
             })
         return uris
 
     @classmethod
-    def _fill_uris(cls, uris, name, site=None):
+    def _fill_uris(cls, uris, name, site=None, state='published', force=False):
         langs = LANGS
         if site and hasattr(site, 'id') and site.id:
             try:
@@ -96,20 +141,24 @@ class Page(ModelSQL, ModelView):
         changed = []
         for uri in uris or []:
             language = getattr(uri, 'language', None)
-            if not language or uri.uri:
+            if not language:
                 continue
             if language.code not in langs:
                 continue
-            uri.uri = cls._uri_from_name(name, language.code)
+            if uri.uri and not force:
+                continue
+            uri.uri = cls._uri_from_name(name, language.code, state=state)
             changed.append(uri)
         return changed
 
-    @fields.depends('name', 'site', 'uris')
+    @fields.depends('name', 'site', 'state', 'uris')
     def on_change_name(self):
         if not self.uris:
-            self.uris = self._default_uris(self.name, self.site)
+            self.uris = self._default_uris(
+                self.name, self.site, state=self.state or 'draft')
         else:
-            self._fill_uris(self.uris, self.name, self.site)
+            self._fill_uris(
+                self.uris, self.name, self.site, state=self.state or 'draft')
 
     @classmethod
     def create(cls, vlist):
@@ -130,11 +179,24 @@ class Page(ModelSQL, ModelView):
                 continue
             to_create.extend({
                 'page': page.id,
-                'language': uri.language.id,
-                'uri': uri.uri,
-            } for uri in cls._default_uris(page.name, page.site))
+                'language': uri['language'],
+                'uri': uri['uri'],
+            } for uri in cls._default_uris(
+                page.name, page.site, state=page.state or 'draft'))
         if to_create:
             PageURI.create(to_create)
+
+    @classmethod
+    def _sync_page_uris(cls, pages, force=False):
+        pool = Pool()
+        PageURI = pool.get('www.page.uri')
+        changed = []
+        for page in pages:
+            changed.extend(cls._fill_uris(
+                page.uris, page.name, page.site,
+                state=page.state or 'draft', force=force))
+        if changed:
+            PageURI.save(changed)
 
     @classmethod
     def write(cls, pages, values, *args):
@@ -143,20 +205,24 @@ class Page(ModelSQL, ModelView):
         pages_without_uris = [page for page in pages if not page.uris]
         if pages_without_uris:
             cls._create_default_uris(pages_without_uris)
-        if 'name' in values:
-            pool = Pool()
-            PageURI = pool.get('www.page.uri')
-            changed = []
-            for page in pages:
-                changed.extend(cls._fill_uris(page.uris, page.name, page.site))
-            if changed:
-                PageURI.save(changed)
+        if 'state' in values:
+            cls._sync_page_uris(pages, force=True)
+        elif 'name' in values:
+            cls._sync_page_uris(pages)
 
     @classmethod
     def __setup__(cls):
         super().__setup__()
         cls._buttons.update({
             'generate_uri': {},
+            'publish': {
+                'invisible': Eval('state') != 'draft',
+                'depends': ['state'],
+                },
+            'draft': {
+                'invisible': Eval('state') != 'published',
+                'depends': ['state'],
+                },
         })
 
     @classmethod
@@ -203,7 +269,9 @@ class Page(ModelSQL, ModelView):
                 cls._create_default_uris([page])
                 page = cls.search([('id', '=', page.id)], limit=1)[0]
 
-            changed = cls._fill_uris(page.uris, page.name, page.site)
+            changed = cls._fill_uris(
+                page.uris, page.name, page.site,
+                state=page.state or 'draft')
             if changed:
                 pool.get('www.page.uri').save(changed)
 
@@ -258,9 +326,39 @@ class Page(ModelSQL, ModelView):
 
             if new_uris:
                 URI.save(new_uris)
-
             if existing_uris:
                 URI.delete(list(existing_uris.values()))
+
+    @classmethod
+    @ModelView.button
+    def publish(cls, pages):
+        for page in pages:
+            old_published = page.published_page
+            if old_published:
+                cls._delete_generated_uris([old_published])
+                cls.delete([old_published])
+
+            published, = cls.copy([page], default={
+                    'state': 'published',
+                    'origin_page': page.id,
+                    'published_page': None,
+                    })
+            cls._sync_page_uris([published], force=True)
+            cls.generate_uri([published])
+            cls.write([page], {'published_page': published.id})
+
+    @classmethod
+    @ModelView.button
+    def draft(cls, pages):
+        for page in pages:
+            if page.origin_page:
+                origin = page.origin_page
+                cls._delete_generated_uris([page])
+                cls.write([origin], {'published_page': None})
+                cls.delete([page])
+            else:
+                cls.write([page], {'state': 'draft'})
+                cls.generate_uri([page])
 
     @staticmethod
     def _preview_message(message):
@@ -324,21 +422,28 @@ class Page(ModelSQL, ModelView):
 class PageURI(ModelSQL, ModelView):
     __name__ = 'www.page.uri'
 
-    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE')
-    language = fields.Many2One('ir.lang', 'Idioma', required=True)
-    uri = fields.Char('URI')
-    main_uri = fields.Boolean('Main URI')
+    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE',
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    language = fields.Many2One('ir.lang', 'Idioma', required=True,
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    uri = fields.Char('URI',
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    main_uri = fields.Boolean('Main URI',
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
 
-    @fields.depends('page', 'language', 'uri', '_parent_page.name')
+    @fields.depends('page', 'language', 'uri',
+        '_parent_page.name', '_parent_page.state')
     def on_change_language(self):
         if self.uri or not self.language:
             return
         name = None
+        state = 'draft'
         if self.page and self.page.name:
             name = self.page.name
+            state = self.page.state or 'draft'
         if not name:
             return
-        self.uri = Page._uri_from_name(name, self.language.code)
+        self.uri = Page._uri_from_name(name, self.language.code, state=state)
 
     @fields.depends('page', 'main_uri')
     def on_change_main_uri(self):
@@ -357,17 +462,29 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     __name__ = 'www.element'
     _table = 'www_component'
 
-    name = fields.Char('Name', required=True)
-    model = fields.Many2One('ir.model', 'Model', required=True)
-    page = fields.Many2One('www.page', 'Page')
+    name = fields.Char('Name', required=True,
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    model = fields.Many2One('ir.model', 'Model', required=True,
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    page = fields.Many2One('www.page', 'Page',
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+    page_state = fields.Function(fields.Char('Page State'),
+        'on_change_with_page_state')
     schema = fields.One2Many('www.schema', 'component', "Schema",
-        size=1, add_remove=[('component', '=', None)])
+        size=1, add_remove=[('component', '=', None)],
+        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
+
+    @fields.depends('page', '_parent_page.state')
+    def on_change_with_page_state(self, name=None):
+        if self.page:
+            return self.page.state
+        return None
 
     @classmethod
     def _preview_image(cls):
@@ -725,6 +842,8 @@ class Schema(ModelSQL, ModelView):
     component = fields.Many2One('www.element', 'Element')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
+    page_state = fields.Function(fields.Char('Page State'),
+        'on_change_with_page_state')
     visible_fields = fields.Function(
         fields.MultiSelection('get_schema_fields', 'Visible Fields'),
         'on_change_with_visible_fields')
@@ -770,6 +889,12 @@ class Schema(ModelSQL, ModelView):
     def on_change_with_model_name(self, name=None):
         if self.component and self.component.model:
             return self.component.model.name
+        return None
+
+    @fields.depends('component', '_parent_component.page_state')
+    def on_change_with_page_state(self, name=None):
+        if self.component:
+            return self.component.page_state
         return None
 
     @fields.depends('component', '_parent_component.model')

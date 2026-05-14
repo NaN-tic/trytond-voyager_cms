@@ -3,8 +3,20 @@
         <page string="Properties" id="properties">
             <label name="name" xalign="0.0"/>
             <field name="name" xexpand="1" xfill="1"/>
+            <label name="state" xalign="0.0"/>
+            <field name="state" xexpand="1" xfill="1"/>
             <label name="site" xalign="0.0"/>
             <field name="site" xexpand="1" xfill="1"/>
+            <group col="-1" colspan="2" id="buttons">
+                <button name="draft"/>
+                <button name="publish" icon="tryton-forward"/>
+            </group>
+            <newline/>
+            <label name="origin_page" xalign="0.0"/>
+            <field name="origin_page" xexpand="1" xfill="1"/>
+            <label name="published_page" xalign="0.0"/>
+            <field name="published_page" xexpand="1" xfill="1"/>
+            <newline/>
             <field name="element" colspan="4" mode="tree,list-form,form" height="900"/>
         </page>
         <page string="Preview" id="preview">

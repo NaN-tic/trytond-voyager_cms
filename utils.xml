@@ -43,6 +43,16 @@ this repository contains the full copyright notices and license terms. -->
             <field name="string">Generate URI</field>
             <field name="model">www.page</field>
         </record>
+        <record model="ir.model.button" id="www_page_publish_button">
+            <field name="name">publish</field>
+            <field name="string">Publish</field>
+            <field name="model">www.page</field>
+        </record>
+        <record model="ir.model.button" id="www_page_draft_button">
+            <field name="name">draft</field>
+            <field name="string">Draft</field>
+            <field name="model">www.page</field>
+        </record>
 
         <!-- www.element -->
         <record model="ir.ui.view" id="www_component_view_tree">
