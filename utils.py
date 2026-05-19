@@ -36,11 +36,15 @@ class Page(Workflow, ModelSQL, ModelView):
     name = fields.Char('Name', required=True,
         states=_PAGE_STATES, depends=_PAGE_DEPENDS)
     site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE',
         states=_PAGE_STATES, depends=_PAGE_DEPENDS)
+    # links a published page back to its draft
     origin_page = fields.Many2One(
         'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
+    # links a draft page to its current published copy
     published_page = fields.Many2One(
         'www.page', 'Published Page', readonly=True, ondelete='SET NULL')
+    # current workflow state of the page
     state = fields.Selection([
             ('draft', 'Draft'),
             ('published', 'Published'),
@@ -79,6 +83,41 @@ class Page(Workflow, ModelSQL, ModelView):
                     ])
             if uris:
                 URI.delete(uris)
+
+    @classmethod
+    def _find_published_pages_to_replace(cls, page):
+        # finds the published copy that must be removed before publishing again
+        pool = Pool()
+        PageURI = pool.get('www.page.uri')
+        if page.published_page:
+            return [page.published_page]
+        if not getattr(page, 'id', None):
+            return []
+        published_pages = cls.search([
+                ('origin_page', '=', page.id),
+                ('state', '=', 'published'),
+                ])
+        if published_pages:
+            return published_pages
+        target_uris = [
+            uri['uri']
+            for uri in cls._default_uris(page.name, page.site, state='published')
+            if uri.get('uri')
+            ]
+        if not target_uris or not getattr(page, 'site', None):
+            return []
+        page_uris = PageURI.search([
+                ('page.site', '=', page.site.id),
+                ('page.state', '=', 'published'),
+                ('page', '!=', page.id),
+                ('uri', 'in', target_uris),
+                ])
+        page_ids = list({uri.page.id for uri in page_uris if getattr(uri, 'page', None)})
+        if not page_ids:
+            return []
+        return cls.search([
+                ('id', 'in', page_ids),
+                ])
 
     @classmethod
     def _state_uri_prefix(cls, state):
@@ -168,6 +207,11 @@ class Page(Workflow, ModelSQL, ModelView):
         return pages
 
     @classmethod
+    def delete(cls, pages):
+        cls._delete_generated_uris(pages)
+        super().delete(pages)
+
+    @classmethod
     def _create_default_uris(cls, pages):
         if not pages:
             return
@@ -207,12 +251,17 @@ class Page(Workflow, ModelSQL, ModelView):
             cls._create_default_uris(pages_without_uris)
         if 'state' in values:
             cls._sync_page_uris(pages, force=True)
+            cls.generate_uri(pages)
         elif 'name' in values:
             cls._sync_page_uris(pages)
 
     @classmethod
     def __setup__(cls):
         super().__setup__()
+        cls._transitions |= set((
+                ('draft', 'published'),
+                ('published', 'draft'),
+                ))
         cls._buttons.update({
             'generate_uri': {},
             'publish': {
@@ -275,13 +324,16 @@ class Page(Workflow, ModelSQL, ModelView):
             if changed:
                 pool.get('www.page.uri').save(changed)
 
-            existing_uris = {
-                (uri.uri, uri.language.code if uri.language else None): uri
-                for uri in URI.search([
+            existing_uris = {}
+            existing_uris_by_language = {}
+            for uri in URI.search([
                     ('resource', '=', resource_ref),
                     ('site', '=', page.site.id),
-                ])
-            }
+                ]):
+                code = uri.language.code if uri.language else None
+                existing_uris[(uri.uri, code)] = uri
+                if code:
+                    existing_uris_by_language[code] = uri
 
             new_uris = []
             main_uri = None
@@ -305,6 +357,12 @@ class Page(Workflow, ModelSQL, ModelView):
 
                 if key in existing_uris:
                     uri = existing_uris.pop(key)
+                    existing_uris_by_language.pop(code, None)
+                elif code in existing_uris_by_language:
+                    uri = existing_uris_by_language.pop(code)
+                    existing_uris.pop(
+                        (uri.uri, uri.language.code if uri.language else None),
+                        None)
                 else:
                     uri = URI()
                     uri.resource = resource_ref
@@ -324,6 +382,20 @@ class Page(Workflow, ModelSQL, ModelView):
                 else:
                     uri.main_uri = main_uri
 
+            conflicting_uris = []
+            new_uri_ids = {uri.id for uri in new_uris if getattr(uri, 'id', None)}
+            for uri in new_uris:
+                duplicates = URI.search([
+                        ('site', '=', page.site.id),
+                        ('uri', '=', uri.uri),
+                        ('id', 'not in', list(new_uri_ids) or [-1]),
+                        ], limit=10)
+                for duplicate in duplicates:
+                    if duplicate.id not in {u.id for u in conflicting_uris}:
+                        conflicting_uris.append(duplicate)
+            if conflicting_uris:
+                URI.delete(conflicting_uris)
+
             if new_uris:
                 URI.save(new_uris)
             if existing_uris:
@@ -331,34 +403,45 @@ class Page(Workflow, ModelSQL, ModelView):
 
     @classmethod
     @ModelView.button
+    @Workflow.transition('published')
     def publish(cls, pages):
+        # turns the current draft into the new published page
         for page in pages:
-            old_published = page.published_page
-            if old_published:
-                cls._delete_generated_uris([old_published])
-                cls.delete([old_published])
-
-            published, = cls.copy([page], default={
-                    'state': 'published',
-                    'origin_page': page.id,
+            old_published_pages = cls._find_published_pages_to_replace(page)
+            if old_published_pages:
+                cls._delete_generated_uris(old_published_pages)
+                cls.delete(old_published_pages)
+            cls.write([page], {
+                    'origin_page': None,
                     'published_page': None,
                     })
-            cls._sync_page_uris([published], force=True)
-            cls.generate_uri([published])
-            cls.write([page], {'published_page': published.id})
+
+    @classmethod
+    def _freeze_published_copy(cls, page):
+        # keeps a frozen published copy while the current page goes back to draft
+        if page.origin_page and page.origin_page.state == 'draft':
+            return page
+        old_published_pages = cls._find_published_pages_to_replace(page)
+        if old_published_pages:
+            cls._delete_generated_uris(old_published_pages)
+            cls.delete(old_published_pages)
+        published_page, = cls.copy([page], default={
+                'state': 'published',
+                'origin_page': page.id,
+                'published_page': None,
+                })
+        cls._sync_page_uris([published_page], force=True)
+        cls.generate_uri([published_page])
+        cls.write([page], {'published_page': published_page.id})
+        return published_page
 
     @classmethod
     @ModelView.button
+    @Workflow.transition('draft')
     def draft(cls, pages):
+        # creates the frozen published copy and keeps editing on the same page
         for page in pages:
-            if page.origin_page:
-                origin = page.origin_page
-                cls._delete_generated_uris([page])
-                cls.write([origin], {'published_page': None})
-                cls.delete([page])
-            else:
-                cls.write([page], {'state': 'draft'})
-                cls.generate_uri([page])
+            cls._freeze_published_copy(page)
 
     @staticmethod
     def _preview_message(message):
@@ -466,7 +549,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
     model = fields.Many2One('ir.model', 'Model', required=True,
         states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
-    page = fields.Many2One('www.page', 'Page',
+    page = fields.Many2One('www.page', 'Page', ondelete='CASCADE',
         states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
     page_state = fields.Function(fields.Char('Page State'),
         'on_change_with_page_state')
@@ -487,6 +570,18 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
+    def delete(cls, elements):
+        pool = Pool()
+        Schema = pool.get('www.schema')
+        schemas = [
+            schema for element in elements
+            for schema in (getattr(element, 'schema', None) or [])
+        ]
+        if schemas:
+            Schema.delete(schemas)
+        super().delete(elements)
+
+    @classmethod
     def _preview_image(cls):
         return (
             'data:image/svg+xml,'
@@ -499,27 +594,15 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         )
 
     @classmethod
-    def _preview_text_value(cls, field_name, field):
-        field_name = field_name.lower()
-        string = getattr(field, 'string', '') or field_name.replace('_', ' ')
-        if 'title' in field_name:
-            return f'Preview {string}'.strip()
-        if 'subtitle' in field_name:
-            return f'Sample {string}'.strip()
-        if field_name.startswith('text') or 'description' in field_name:
-            return (
-                f'Preview content for {string}. This placeholder is shown '
-                'until a schema with real content is assigned.'
-            )
-        if 'alt' in field_name:
-            return 'Preview image'
-        if 'url' in field_name or 'href' in field_name or 'link' in field_name:
-            return '#'
-        if 'icon' in field_name:
-            return 'M12 4v16m8-8H4'
-        if 'color' in field_name:
-            return DEFAULT_BACKGROUND_COLOR
-        return f'Preview {string}'.strip()
+    def _preview_char_value(cls, field):
+        return 'Preview'
+
+    @classmethod
+    def _preview_text_value(cls, field):
+        return (
+            'Preview content. This placeholder is shown until a schema with '
+            'real content is assigned.'
+        )
 
     @classmethod
     def _preview_selection_value(cls, field_name, field):
@@ -569,8 +652,12 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             return 3
         if numeric_types and isinstance(field, numeric_types):
             return 3
-        if isinstance(field, (fields.Char, fields.Text)):
-            return cls._preview_text_value(field_name, field)
+        if isinstance(field, fields.Binary):
+            return cls._preview_image().encode('utf-8')
+        if isinstance(field, fields.Char):
+            return cls._preview_char_value(field)
+        if isinstance(field, fields.Text):
+            return cls._preview_text_value(field)
         return None
 
     @classmethod
@@ -621,9 +708,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
-            if schema:
-                return schema
-            return cls._build_preview_schema()
+            return cls._build_preview_schema_with_values(schema)
         if provided_schema:
             return schema
         if schema:
@@ -839,7 +924,8 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
 class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
-    component = fields.Many2One('www.element', 'Element')
+    component = fields.Many2One('www.element', 'Element',
+        ondelete='CASCADE')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
     page_state = fields.Function(fields.Char('Page State'),
@@ -1003,6 +1089,9 @@ class ContentWrapper(Endpoint):
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
+
     @classmethod
     def _get_resources(cls):
         return super()._get_resources() + ['www.page']
@@ -1011,11 +1100,25 @@ class VoyagerURI(metaclass=PoolMeta):
 class VoyagerMenu(metaclass=PoolMeta):
     __name__ = 'www.menu'
 
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
+    uri = fields.Many2One(
+        'www.uri', 'URI',
+        domain=[('main_uri', '=', None)],
+        states={
+            'invisible': Eval('type') != 'internal',
+            'required': Eval('type') == 'internal',
+        },
+        depends=['type'],
+        ondelete='SET NULL',
+    )
+
     component = fields.Many2One('www.element', 'Element',
         states={
             'invisible': Eval('type') != 'component',
         },
-        depends=['type'])
+        depends=['type'],
+        ondelete='SET NULL')
 
     @classmethod
     def __setup__(cls):
@@ -1026,17 +1129,40 @@ class VoyagerMenu(metaclass=PoolMeta):
 class SiteLang(ModelSQL):
     __name__ = 'www.site.lang'
 
-    site = fields.Many2One('www.site', 'Site', required=True)
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
     language = fields.Many2One('ir.lang', 'Language', required=True)
 
 
 class VoyagerSite(metaclass=PoolMeta):
     __name__ = 'www.site'
 
-    header = fields.Many2One('www.element', 'Header')
-    footer = fields.Many2One('www.element', 'Footer')
-    layout = fields.Many2One('www.element', 'Layout')
+    header = fields.Many2One('www.element', 'Header', ondelete='SET NULL')
+    footer = fields.Many2One('www.element', 'Footer', ondelete='SET NULL')
+    layout = fields.Many2One('www.element', 'Layout', ondelete='SET NULL')
     langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
+
+    @classmethod
+    def delete(cls, sites):
+        pool = Pool()
+        Page = pool.get('www.page')
+        URI = pool.get('www.uri')
+        site_ids = [site.id for site in sites if getattr(site, 'id', None)]
+
+        if site_ids:
+            pages = Page.search([
+                    ('site', 'in', site_ids),
+                    ])
+            if pages:
+                Page.delete(pages)
+
+            uris = URI.search([
+                    ('site', 'in', site_ids),
+                    ])
+            if uris:
+                URI.delete(uris)
+
+        super().delete(sites)
 
 
 class ComponentCMS(Component):
