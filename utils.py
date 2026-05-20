@@ -1,10 +1,8 @@
 from datetime import date
-from pathlib import Path
 from xml.sax.saxutils import escape
 
 from dominate.tags import div
 from dominate.util import raw
-from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 
 from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
@@ -12,32 +10,27 @@ from trytond.pool import Pool, PoolMeta
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
-from trytond.pyson import Eval
-from trytond.tools import slugify
+from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
 from trytond.url import http_host
-from werkzeug.wrappers import Response
 
-LANGS = ['es', 'en', 'ca']
-
-DEFAULT_BACKGROUND_COLOR = '#F8FAFC'
-_PAGE_STATES = {'readonly': Eval('state') != 'draft'}
-_PAGE_DEPENDS = ['state']
-_CHILD_PAGE_STATES = {'readonly': Eval('_parent_page', {}).get('state') != 'draft'}
-_CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
-CHILD_PAGES_STATES = {'readonly': Eval('page_state') != 'draft'}
-CHILD_PAGES_DEPENDS = ['page_state']
-CHILD_PAGES_DEFENDS = CHILD_PAGES_DEPENDS
+PAGE_STATES = {'readonly': Eval('state') != 'draft'}
+PAGE_DEPENDS = ['state']
+CHILD_PAGE_STATES = {
+    'readonly': Bool(Eval('page'))
+    & (Eval('_parent_page', {}).get('state') != 'draft')
+}
+CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
 
 
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
     name = fields.Char('Name', required=True,
-        states=_PAGE_STATES, depends=_PAGE_DEPENDS)
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
     site = fields.Many2One('www.site', 'Site', required=True,
         ondelete='CASCADE',
-        states=_PAGE_STATES, depends=_PAGE_DEPENDS)
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
     # links a published page back to its draft
     origin_page = fields.Many2One(
         'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
@@ -52,12 +45,12 @@ class Page(Workflow, ModelSQL, ModelView):
     uris = fields.One2Many(
         'www.page.uri', 'page', 'URIs',
         order=[('id', 'ASC')],
-        states=_PAGE_STATES, depends=_PAGE_DEPENDS,
+        states=PAGE_STATES, depends=PAGE_DEPENDS,
     )
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
-        states=_PAGE_STATES, depends=_PAGE_DEPENDS,
+        states=PAGE_STATES, depends=PAGE_DEPENDS,
     )
     preview = fields.Function(
         fields.Binary('Page Preview', filename='preview_filename'),
@@ -65,6 +58,25 @@ class Page(Workflow, ModelSQL, ModelView):
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls._transitions |= set((
+                ('draft', 'published'),
+                ('published', 'draft'),
+                ))
+        cls._buttons.update({
+            'generate_uri': {},
+            'publish': {
+                'invisible': Eval('state') != 'draft',
+                'depends': ['state'],
+                },
+            'draft': {
+                'invisible': Eval('state') != 'published',
+                'depends': ['state'],
+                },
+        })
 
     @staticmethod
     def default_state():
@@ -137,17 +149,32 @@ class Page(Workflow, ModelSQL, ModelView):
         return f'{prefix}/{code}/{base}'
 
     @classmethod
-    def _default_uris(cls, name, site=None, state='published'):
-        langs = LANGS
-        if site and hasattr(site, 'id') and site.id:
+    def _site_lang_codes(cls, site):
+        if not site:
+            return []
+        langs = []
+        if getattr(site, 'langs', None):
+            langs = [
+                lang.code for lang in site.langs
+                if getattr(lang, 'code', None)
+            ]
+        elif hasattr(site, 'id') and site.id:
             try:
                 pool = Pool()
                 SiteLang = pool.get('www.site.lang')
                 site_langs = SiteLang.search([('site', '=', site.id)])
-                if site_langs:
-                    langs = [sl.language.code for sl in site_langs]
+                langs = [
+                    sl.language.code for sl in site_langs
+                    if getattr(sl, 'language', None)
+                    and getattr(sl.language, 'code', None)
+                ]
             except Exception:
                 pass
+        return langs
+
+    @classmethod
+    def _default_uris(cls, name, site=None, state='published'):
+        langs = cls._site_lang_codes(site)
         pool = Pool()
         Lang = pool.get('ir.lang')
         languages = {
@@ -167,16 +194,7 @@ class Page(Workflow, ModelSQL, ModelView):
 
     @classmethod
     def _fill_uris(cls, uris, name, site=None, state='published', force=False):
-        langs = LANGS
-        if site and hasattr(site, 'id') and site.id:
-            try:
-                pool = Pool()
-                SiteLang = pool.get('www.site.lang')
-                site_langs = SiteLang.search([('site', '=', site.id)])
-                if site_langs:
-                    langs = [sl.language.code for sl in site_langs]
-            except Exception:
-                pass
+        langs = cls._site_lang_codes(site)
         changed = []
         for uri in uris or []:
             language = getattr(uri, 'language', None)
@@ -256,25 +274,6 @@ class Page(Workflow, ModelSQL, ModelView):
             cls._sync_page_uris(pages)
 
     @classmethod
-    def __setup__(cls):
-        super().__setup__()
-        cls._transitions |= set((
-                ('draft', 'published'),
-                ('published', 'draft'),
-                ))
-        cls._buttons.update({
-            'generate_uri': {},
-            'publish': {
-                'invisible': Eval('state') != 'draft',
-                'depends': ['state'],
-                },
-            'draft': {
-                'invisible': Eval('state') != 'published',
-                'depends': ['state'],
-                },
-        })
-
-    @classmethod
     def validate(cls, pages):
         super().validate(pages)
         for page in pages:
@@ -293,7 +292,6 @@ class Page(Workflow, ModelSQL, ModelView):
         pool = Pool()
         URI = pool.get('www.uri')
         Model = pool.get('ir.model')
-        SiteLang = pool.get('www.site.lang')
 
         endpoint_model = Model.search(
             [('name', '=', 'www.content.wrapper')],
@@ -342,14 +340,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 if not uri_row.uri or not uri_row.language:
                     continue
                 code = uri_row.language.code
-                site_langs = LANGS
-                if page.site and hasattr(page.site, 'id') and page.site.id:
-                    try:
-                        site_lang_records = SiteLang.search([('site', '=', page.site.id)])
-                        if site_lang_records:
-                            site_langs = [sl.language.code for sl in site_lang_records]
-                    except Exception:
-                        pass
+                site_langs = cls._site_lang_codes(page.site)
                 if code not in site_langs:
                     continue
 
@@ -506,13 +497,13 @@ class PageURI(ModelSQL, ModelView):
     __name__ = 'www.page.uri'
 
     page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE',
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     language = fields.Many2One('ir.lang', 'Idioma', required=True,
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     uri = fields.Char('URI',
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     main_uri = fields.Boolean('Main URI',
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
 
     @fields.depends('page', 'language', 'uri',
         '_parent_page.name', '_parent_page.state')
@@ -538,24 +529,23 @@ class PageURI(ModelSQL, ModelView):
 
     def get_rec_name(self, name):
         language = self.language.code if self.language else ''
-        return f'{language}: {self.uri or ""}'.strip(': ')  
+        return f'{language}: {self.uri or ""}'.strip(': ')
 
 
 class Element(sequence_ordered(), ModelSQL, ModelView):
     __name__ = 'www.element'
-    _table = 'www_component'
 
     name = fields.Char('Name', required=True,
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     model = fields.Many2One('ir.model', 'Model', required=True,
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     page = fields.Many2One('www.page', 'Page', ondelete='CASCADE',
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     page_state = fields.Function(fields.Char('Page State'),
         'on_change_with_page_state')
     schema = fields.One2Many('www.schema', 'component', "Schema",
         size=1, add_remove=[('component', '=', None)],
-        states=_CHILD_PAGE_STATES, depends=_CHILD_PAGE_DEPENDS)
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
@@ -933,9 +923,6 @@ class Schema(ModelSQL, ModelView):
     visible_fields = fields.Function(
         fields.MultiSelection('get_schema_fields', 'Visible Fields'),
         'on_change_with_visible_fields')
-    # schema extensions hide the rest inline with:
-    # states={'invisible': ~Eval('visible_fields', []).contains('field_name')}
-    # depends=['visible_fields']
 
     @classmethod
     def _schema_content_fields(cls):
@@ -994,7 +981,8 @@ class Schema(ModelSQL, ModelView):
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
     _url = '/content-wrapper'
-    _type = 'www'
+    #TODO: what we do with the type??
+    _type = []
     page = fields.Many2One('www.page', 'Page')
 
     def get_not_found_content(self):
@@ -1089,9 +1077,6 @@ class ContentWrapper(Endpoint):
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
-    site = fields.Many2One('www.site', 'Site', required=True,
-        ondelete='CASCADE')
-
     @classmethod
     def _get_resources(cls):
         return super()._get_resources() + ['www.page']
@@ -1099,19 +1084,6 @@ class VoyagerURI(metaclass=PoolMeta):
 
 class VoyagerMenu(metaclass=PoolMeta):
     __name__ = 'www.menu'
-
-    site = fields.Many2One('www.site', 'Site', required=True,
-        ondelete='CASCADE')
-    uri = fields.Many2One(
-        'www.uri', 'URI',
-        domain=[('main_uri', '=', None)],
-        states={
-            'invisible': Eval('type') != 'internal',
-            'required': Eval('type') == 'internal',
-        },
-        depends=['type'],
-        ondelete='SET NULL',
-    )
 
     component = fields.Many2One('www.element', 'Element',
         states={

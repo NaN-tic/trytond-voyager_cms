@@ -1,0 +1,267 @@
+#
+msgid ""
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "field:www.content.wrapper,page:"
+msgid "Page"
+msgstr "Página"
+
+msgctxt "field:www.element,model:"
+msgid "Model"
+msgstr "Modelo"
+
+msgctxt "field:www.element,name:"
+msgid "Name"
+msgstr "Nombre"
+
+msgctxt "field:www.element,page:"
+msgid "Page"
+msgstr "Página"
+
+msgctxt "field:www.element,page_state:"
+msgid "Page State"
+msgstr "Estado de la página"
+
+msgctxt "field:www.element,preview:"
+msgid "HTML Preview"
+msgstr "Vista previa HTML"
+
+msgctxt "field:www.element,preview_filename:"
+msgid "Preview Filename"
+msgstr "Vista previa del nombre del archivo"
+
+msgctxt "field:www.element,schema:"
+msgid "Schema"
+msgstr "Esquema"
+
+msgctxt "field:www.menu,component:"
+msgid "Element"
+msgstr "Elemento"
+
+msgctxt "field:www.page,element:"
+msgid "Elements"
+msgstr "Elementos"
+
+msgctxt "field:www.page,name:"
+msgid "Name"
+msgstr "Nombre"
+
+msgctxt "field:www.page,origin_page:"
+msgid "Origin Page"
+msgstr "Página de origen"
+
+msgctxt "field:www.page,preview:"
+msgid "Page Preview"
+msgstr "Vista previa de la página"
+
+msgctxt "field:www.page,preview_filename:"
+msgid "Preview Filename"
+msgstr "Vista previa del nombre del archivo"
+
+msgctxt "field:www.page,published_page:"
+msgid "Published Page"
+msgstr "Página publicada"
+
+msgctxt "field:www.page,site:"
+msgid "Site"
+msgstr "Sitio"
+
+msgctxt "field:www.page,state:"
+msgid "State"
+msgstr "Estado"
+
+msgctxt "field:www.page,uris:"
+msgid "URIs"
+msgstr "URIs"
+
+msgctxt "field:www.page.uri,language:"
+msgid "Idioma"
+msgstr "Idioma"
+
+msgctxt "field:www.page.uri,main_uri:"
+msgid "Main URI"
+msgstr "URI principal"
+
+msgctxt "field:www.page.uri,page:"
+msgid "Page"
+msgstr "Página"
+
+msgctxt "field:www.page.uri,uri:"
+msgid "URI"
+msgstr "URI"
+
+msgctxt "field:www.schema,component:"
+msgid "Element"
+msgstr "Elemento"
+
+msgctxt "field:www.schema,model_name:"
+msgid "Model Name"
+msgstr "Nombre del modelo"
+
+msgctxt "field:www.schema,page_state:"
+msgid "Page State"
+msgstr "Estado de la página"
+
+msgctxt "field:www.schema,visible_fields:"
+msgid "Visible Fields"
+msgstr "Campos visibles"
+
+msgctxt "field:www.site,footer:"
+msgid "Footer"
+msgstr "Pie de página"
+
+msgctxt "field:www.site,header:"
+msgid "Header"
+msgstr "Cabecera"
+
+msgctxt "field:www.site,langs:"
+msgid "Languages"
+msgstr "Idiomas"
+
+msgctxt "field:www.site,layout:"
+msgid "Layout"
+msgstr "Diseño"
+
+msgctxt "field:www.site.lang,language:"
+msgid "Language"
+msgstr "Idioma"
+
+msgctxt "field:www.site.lang,site:"
+msgid "Site"
+msgstr "Sitio"
+
+msgctxt "model:ir.action,name:act_www_component"
+msgid "Elements"
+msgstr "Elementos"
+
+msgctxt "model:ir.action,name:act_www_page"
+msgid "All Pages"
+msgstr "Todas las páginas"
+
+msgctxt "model:ir.action,name:act_www_schema"
+msgid "Schemas"
+msgstr "Esquemas"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_all"
+msgid "All"
+msgstr "Todo"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_draft"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_published"
+msgid "Published"
+msgstr "Publicado"
+
+msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
+msgid "Missing content wrapper endpoint for page URI generation."
+msgstr ""
+"Falta el endpoint del contenedor de contenido para generar el URI de la "
+"página."
+
+msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
+msgid "Please set a site before generating URIs for page \"%(page)s\"."
+msgstr ""
+"Por favor, configure un sitio antes de generar URI para la página "
+"\"%(page)s\"."
+
+msgctxt "model:ir.message,text:msg_page_main_uri_unique"
+msgid "Only one main URI can be selected for page \"%(page)s\"."
+msgstr "Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
+
+msgctxt "model:ir.message,text:msg_page_missing_draft"
+msgid "The published page \"%(page)s\" has no linked draft."
+msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."
+
+msgctxt "model:ir.model.button,string:www_page_draft_button"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "model:ir.model.button,string:www_page_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
+
+msgctxt "model:ir.model.button,string:www_page_publish_button"
+msgid "Publish"
+msgstr "Publicar"
+
+msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
+msgid "Voyager CMS"
+msgstr "Voyager CMS"
+
+msgctxt "model:ir.ui.menu,name:menu_www_component"
+msgid "Elements"
+msgstr "Elementos"
+
+msgctxt "model:ir.ui.menu,name:menu_www_page"
+msgid "Pages"
+msgstr "Páginas"
+
+msgctxt "model:ir.ui.menu,name:menu_www_schema"
+msgid "Schemas"
+msgstr "Esquemas"
+
+msgctxt "model:www.content.wrapper,string:"
+msgid "Component"
+msgstr "Componente"
+
+msgctxt "model:www.element,string:"
+msgid "Www Element"
+msgstr "Elemento WWW"
+
+msgctxt "model:www.page,string:"
+msgid "Www Page"
+msgstr "Página WWW"
+
+msgctxt "model:www.page.uri,string:"
+msgid "Www Page Uri"
+msgstr "Uri de la página WWW"
+
+msgctxt "model:www.schema,string:"
+msgid "Www Schema"
+msgstr "Esquema de www"
+
+msgctxt "model:www.site.lang,string:"
+msgid "Www Site Lang"
+msgstr "Idioma sitio web"
+
+msgctxt "selection:www.menu,type:"
+msgid "Element"
+msgstr "Elemento"
+
+msgctxt "selection:www.page,state:"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "selection:www.page,state:"
+msgid "Published"
+msgstr "Publicado"
+
+msgctxt "view:www.element:"
+msgid "Preview"
+msgstr "Vista previa"
+
+msgctxt "view:www.element:"
+msgid "Properties"
+msgstr "Propiedades"
+
+msgctxt "view:www.page:"
+msgid "Preview"
+msgstr "Vista previa"
+
+msgctxt "view:www.page:"
+msgid "Properties"
+msgstr "Propiedades"
+
+msgctxt "view:www.page:"
+msgid "Uris"
+msgstr "URIs"
+
+msgctxt "view:www.site:"
+msgid "CMS"
+msgstr "CMS"
+
+msgctxt "voyager:v:"
+msgid "Page not found"
+msgstr "Página no encontrada"

@@ -1,0 +1,266 @@
+#
+msgid ""
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "field:www.content.wrapper,page:"
+msgid "Page"
+msgstr "Pàgina"
+
+msgctxt "field:www.element,model:"
+msgid "Model"
+msgstr "Model"
+
+msgctxt "field:www.element,name:"
+msgid "Name"
+msgstr "Nom"
+
+msgctxt "field:www.element,page:"
+msgid "Page"
+msgstr "Pàgina"
+
+msgctxt "field:www.element,page_state:"
+msgid "Page State"
+msgstr "Estat de la pàgina"
+
+msgctxt "field:www.element,preview:"
+msgid "HTML Preview"
+msgstr "Vista prèvia d'HTML"
+
+msgctxt "field:www.element,preview_filename:"
+msgid "Preview Filename"
+msgstr "Nom vista prèvia"
+
+msgctxt "field:www.element,schema:"
+msgid "Schema"
+msgstr "Esquema"
+
+msgctxt "field:www.menu,component:"
+msgid "Element"
+msgstr "Element"
+
+msgctxt "field:www.page,element:"
+msgid "Elements"
+msgstr "Elements"
+
+msgctxt "field:www.page,name:"
+msgid "Name"
+msgstr "Nom"
+
+msgctxt "field:www.page,origin_page:"
+msgid "Origin Page"
+msgstr "Pàgina d'origen"
+
+msgctxt "field:www.page,preview:"
+msgid "Page Preview"
+msgstr "Vista prèvia de la pàgina"
+
+msgctxt "field:www.page,preview_filename:"
+msgid "Preview Filename"
+msgstr "Nom del fitxer de vista prèvia"
+
+msgctxt "field:www.page,published_page:"
+msgid "Published Page"
+msgstr "Pàgina publicada"
+
+msgctxt "field:www.page,site:"
+msgid "Site"
+msgstr "Lloc web"
+
+msgctxt "field:www.page,state:"
+msgid "State"
+msgstr "Estat"
+
+msgctxt "field:www.page,uris:"
+msgid "URIs"
+msgstr "URIs"
+
+msgctxt "field:www.page.uri,language:"
+msgid "Idioma"
+msgstr "Idioma"
+
+msgctxt "field:www.page.uri,main_uri:"
+msgid "Main URI"
+msgstr "URI principal"
+
+msgctxt "field:www.page.uri,page:"
+msgid "Page"
+msgstr "Pàgina"
+
+msgctxt "field:www.page.uri,uri:"
+msgid "URI"
+msgstr "URI"
+
+msgctxt "field:www.schema,component:"
+msgid "Element"
+msgstr "Element"
+
+msgctxt "field:www.schema,model_name:"
+msgid "Model Name"
+msgstr "Nom del model"
+
+msgctxt "field:www.schema,page_state:"
+msgid "Page State"
+msgstr "Estat de la pàgina"
+
+msgctxt "field:www.schema,visible_fields:"
+msgid "Visible Fields"
+msgstr "Camps visibles"
+
+msgctxt "field:www.site,footer:"
+msgid "Footer"
+msgstr "Peu de pàgina"
+
+msgctxt "field:www.site,header:"
+msgid "Header"
+msgstr "Capçalera"
+
+msgctxt "field:www.site,langs:"
+msgid "Languages"
+msgstr "Idioma"
+
+msgctxt "field:www.site,layout:"
+msgid "Layout"
+msgstr "Disseny"
+
+msgctxt "field:www.site.lang,language:"
+msgid "Language"
+msgstr "Idioma"
+
+msgctxt "field:www.site.lang,site:"
+msgid "Site"
+msgstr "Lloc web"
+
+msgctxt "model:ir.action,name:act_www_component"
+msgid "Elements"
+msgstr "Elements"
+
+msgctxt "model:ir.action,name:act_www_page"
+msgid "All Pages"
+msgstr "Totes les pàgines"
+
+msgctxt "model:ir.action,name:act_www_schema"
+msgid "Schemas"
+msgstr "Esquemes"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_all"
+msgid "All"
+msgstr "Tot"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_draft"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_published"
+msgid "Published"
+msgstr "Publicat"
+
+msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
+msgid "Missing content wrapper endpoint for page URI generation."
+msgstr ""
+"Falta l’endpoint del contenidor de contingut per generar l’URI de la pàgina."
+
+msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
+msgid "Please set a site before generating URIs for page \"%(page)s\"."
+msgstr ""
+"Si us plau, defineu un lloc abans de generar URI per a la pàgina "
+"\"%(page)s\"."
+
+msgctxt "model:ir.message,text:msg_page_main_uri_unique"
+msgid "Only one main URI can be selected for page \"%(page)s\"."
+msgstr "Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
+
+msgctxt "model:ir.message,text:msg_page_missing_draft"
+msgid "The published page \"%(page)s\" has no linked draft."
+msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
+
+msgctxt "model:ir.model.button,string:www_page_draft_button"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "model:ir.model.button,string:www_page_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
+
+msgctxt "model:ir.model.button,string:www_page_publish_button"
+msgid "Publish"
+msgstr "Publica"
+
+msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
+msgid "Voyager CMS"
+msgstr "Voyager CMS"
+
+msgctxt "model:ir.ui.menu,name:menu_www_component"
+msgid "Elements"
+msgstr "Elements"
+
+msgctxt "model:ir.ui.menu,name:menu_www_page"
+msgid "Pages"
+msgstr "Pàgines"
+
+msgctxt "model:ir.ui.menu,name:menu_www_schema"
+msgid "Schemas"
+msgstr "Esquemes"
+
+msgctxt "model:www.content.wrapper,string:"
+msgid "Component"
+msgstr "Component"
+
+msgctxt "model:www.element,string:"
+msgid "Www Element"
+msgstr "Element Www"
+
+msgctxt "model:www.page,string:"
+msgid "Www Page"
+msgstr "Pàgina WWW"
+
+msgctxt "model:www.page.uri,string:"
+msgid "Www Page Uri"
+msgstr "Uri de la pàgina www"
+
+msgctxt "model:www.schema,string:"
+msgid "Www Schema"
+msgstr "Esquema WWW"
+
+msgctxt "model:www.site.lang,string:"
+msgid "Www Site Lang"
+msgstr "Idioma del lloc web www"
+
+msgctxt "selection:www.menu,type:"
+msgid "Element"
+msgstr "Element"
+
+msgctxt "selection:www.page,state:"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "selection:www.page,state:"
+msgid "Published"
+msgstr "Publicat"
+
+msgctxt "view:www.element:"
+msgid "Preview"
+msgstr "Vista prèvia"
+
+msgctxt "view:www.element:"
+msgid "Properties"
+msgstr "Propietats"
+
+msgctxt "view:www.page:"
+msgid "Preview"
+msgstr "Vista prèvia"
+
+msgctxt "view:www.page:"
+msgid "Properties"
+msgstr "Propietats"
+
+msgctxt "view:www.page:"
+msgid "Uris"
+msgstr "URIs"
+
+msgctxt "view:www.site:"
+msgid "CMS"
+msgstr "CMS"
+
+msgctxt "voyager:v:"
+msgid "Page not found"
+msgstr "Pàgina no trobada"

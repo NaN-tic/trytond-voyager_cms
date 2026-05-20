@@ -28,16 +28,6 @@ this repository contains the full copyright notices and license terms. -->
             <field name="name">All Pages</field>
             <field name="res_model">www.page</field>
         </record>
-        <record model="ir.action.act_window" id="act_www_page_draft">
-            <field name="name">Draft Pages</field>
-            <field name="res_model">www.page</field>
-            <field name="domain" eval="[('state', '=', 'draft')]" pyson="1"/>
-        </record>
-        <record model="ir.action.act_window" id="act_www_page_published">
-            <field name="name">Published Pages</field>
-            <field name="res_model">www.page</field>
-            <field name="domain" eval="[('state', '=', 'published')]" pyson="1"/>
-        </record>
         <record model="ir.action.act_window.view" id="act_www_page_view1">
             <field name="sequence" eval="10"/>
             <field name="view" ref="www_page_view_tree"/>
@@ -48,25 +38,27 @@ this repository contains the full copyright notices and license terms. -->
             <field name="view" ref="www_page_view_form"/>
             <field name="act_window" ref="act_www_page"/>
         </record>
-        <record model="ir.action.act_window.view" id="act_www_page_draft_view1">
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_draft">
+            <field name="name">Draft</field>
             <field name="sequence" eval="10"/>
-            <field name="view" ref="www_page_view_tree"/>
-            <field name="act_window" ref="act_www_page_draft"/>
+            <field name="domain" eval="[('state', '=', 'draft')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_page"/>
         </record>
-        <record model="ir.action.act_window.view" id="act_www_page_draft_view2">
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_published">
+            <field name="name">Published</field>
             <field name="sequence" eval="20"/>
-            <field name="view" ref="www_page_view_form"/>
-            <field name="act_window" ref="act_www_page_draft"/>
+            <field name="domain" eval="[('state', '=', 'published')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_page"/>
         </record>
-        <record model="ir.action.act_window.view" id="act_www_page_published_view1">
-            <field name="sequence" eval="10"/>
-            <field name="view" ref="www_page_view_tree"/>
-            <field name="act_window" ref="act_www_page_published"/>
-        </record>
-        <record model="ir.action.act_window.view" id="act_www_page_published_view2">
-            <field name="sequence" eval="20"/>
-            <field name="view" ref="www_page_view_form"/>
-            <field name="act_window" ref="act_www_page_published"/>
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_all">
+            <field name="name">All</field>
+            <field name="sequence" eval="9999"/>
+            <field name="act_window" ref="act_www_page"/>
         </record>
         <record model="ir.model.button" id="www_page_generate_uri_button">
             <field name="name">generate_uri</field>
@@ -170,13 +162,8 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <menuitem id="menu_voyager_cms" name="Voyager CMS" sequence="210"/>
-        <menuitem parent="menu_voyager_cms" name="Pages" id="menu_www_page_root"/>
-        <menuitem parent="menu_www_page_root" action="act_www_page"
-            id="menu_www_page" name="All" sequence="10"/>
-        <menuitem parent="menu_www_page_root" action="act_www_page_draft"
-            id="menu_www_page_draft" name="Draft" sequence="20"/>
-        <menuitem parent="menu_www_page_root" action="act_www_page_published"
-            id="menu_www_page_published" name="Published" sequence="30"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_page"
+            name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
         <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema"/>
     </data>
