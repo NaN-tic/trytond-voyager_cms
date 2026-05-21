@@ -23,6 +23,68 @@ CHILD_PAGE_STATES = {
 CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
 
 
+class _PreviewAdapter:
+
+    @staticmethod
+    def build(endpoint, values=None):
+        return '#'
+
+
+class _PreviewEndpointArgs(dict):
+
+    def __missing__(self, key):
+        return []
+
+
+class _PreviewCache(dict):
+
+    def set(self, key, value):
+        self[key] = value
+
+
+class _PreviewPlaceholder:
+
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+    def __getattr__(self, name):
+        value = self.__dict__.get(name)
+        if value is None:
+            value = self.__class__()
+            self.__dict__[name] = value
+        return value
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __bool__(self):
+        return False
+
+    def __iter__(self):
+        return iter(())
+
+    def __call__(self, *args, **kwargs):
+        return self.__class__()
+
+    def __str__(self):
+        return ''
+
+    def __repr__(self):
+        return 'PreviewPlaceholder()'
+
+
+def _build_preview_voyager_context(site):
+    return VoyagerContext(
+        site=site,
+        session=_PreviewPlaceholder(preview=True),
+        cache=_PreviewCache(),
+        request=_PreviewPlaceholder(preview=True),
+        adapter=_PreviewAdapter(),
+        endpoint_args=_PreviewEndpointArgs(),
+        web_prefix='',
+    )
+
+
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
@@ -447,21 +509,8 @@ class Page(Workflow, ModelSQL, ModelView):
         pool = Pool()
         Wrapper = pool.get('www.content.wrapper')
         site = page.site if page and page.site else None
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site or getattr(voyager_context, 'site', None),
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
         with Transaction().set_context(
-                voyager_context=voyager_context,
+                voyager_context=_build_preview_voyager_context(site),
                 voyager_cms_preview=True):
             rendered = Wrapper(page=page).render()
         if hasattr(rendered, 'render'):
@@ -769,20 +818,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             layout = LayoutModel(
                 **cls.get_element_kwargs(
                     LayoutModel, layout_component.schema))
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site,
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
-        with Transaction().set_context(voyager_context=voyager_context):
+        with Transaction().set_context(
+                voyager_context=_build_preview_voyager_context(site),
+                voyager_cms_preview=True):
             if site and not preview_chrome:
                 with div() as wrapped:
                     header_component = getattr(site, 'header', None)
@@ -851,21 +889,8 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     @classmethod
     def render_preview_content(cls, element):
         site = element.page.site if element.page and element.page.site else None
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site or getattr(voyager_context, 'site', None),
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
         with Transaction().set_context(
-                voyager_context=voyager_context,
+                voyager_context=_build_preview_voyager_context(site),
                 voyager_cms_preview=True):
             rendered = cls.render_element_content(
                 element.model.name, element.schema)
