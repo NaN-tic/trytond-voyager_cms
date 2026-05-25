@@ -11,13 +11,10 @@
             <label name="model"/>
             <field name="model"/>
             <newline/>
-            <label name="show_preview"/>
-            <field name="show_preview"/>
             <field name="schema" mode="form,tree" colspan="4"/>
         </page>
         <page string="Preview" id="preview">
-            <field name="preview" widget="document" colspan="4" height="600"
-                states="{'invisible': (Eval('page') == None) | (Eval('show_preview') == False)}"/>
+            <field name="preview" widget="document" colspan="4" height="600"/>
         </page>
     </notebook>
 </form>
