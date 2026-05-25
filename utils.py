@@ -179,11 +179,9 @@ class Page(Workflow, ModelSQL, ModelView):
             ('draft', 'Draft'),
             ('published', 'Published'),
             ], 'State', readonly=True, required=True, sort=False)
-    uris = fields.One2Many(
-        'www.page.uri', 'page', 'URIs',
-        order=[('id', 'ASC')],
-        states=PAGE_STATES, depends=PAGE_DEPENDS,
-    )
+    uris = fields.Function(
+        fields.One2Many('www.uri', None, 'URIs', readonly=True),
+        'get_uris')
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
@@ -220,6 +218,24 @@ class Page(Workflow, ModelSQL, ModelView):
         return 'draft'
 
     @classmethod
+    def get_uris(cls, pages, name):
+        pool = Pool()
+        URI = pool.get('www.uri')
+        result = {}
+        for page in pages:
+            page_id = getattr(page, 'id', None)
+            if not page_id:
+                result[page_id] = []
+                continue
+            resource_ref = f'{cls.__name__},{page_id}'
+            result[page_id] = [
+                uri.id for uri in URI.search([
+                        ('resource', '=', resource_ref),
+                        ], order=[('id', 'ASC')])
+            ]
+        return result
+
+    @classmethod
     def _delete_generated_uris(cls, pages):
         if not pages:
             return
@@ -237,7 +253,7 @@ class Page(Workflow, ModelSQL, ModelView):
     def _find_published_pages_to_replace(cls, page):
         # finds the published copy that must be removed before publishing again
         pool = Pool()
-        PageURI = pool.get('www.page.uri')
+        URI = pool.get('www.uri')
         if page.published_page:
             return [page.published_page]
         if not getattr(page, 'id', None):
@@ -255,17 +271,37 @@ class Page(Workflow, ModelSQL, ModelView):
             ]
         if not target_uris or not getattr(page, 'site', None):
             return []
-        page_uris = PageURI.search([
-                ('page.site', '=', page.site.id),
-                ('page.state', '=', 'published'),
-                ('page', '!=', page.id),
+        resource_ref = f'{cls.__name__},{page.id}'
+        uris = URI.search([
+                ('site', '=', page.site.id),
+                ('resource', '!=', resource_ref),
                 ('uri', 'in', target_uris),
                 ])
-        page_ids = list({uri.page.id for uri in page_uris if getattr(uri, 'page', None)})
+        page_ids = set()
+        for uri in uris:
+            resource = getattr(uri, 'resource', None)
+            if not resource:
+                continue
+            # The Reference is stored as "model,id".
+            if isinstance(resource, str):
+                if not resource.startswith(f'{cls.__name__},'):
+                    continue
+                try:
+                    page_ids.add(int(resource.split(',', 1)[1]))
+                except Exception:
+                    continue
+            else:
+                try:
+                    model_name, rec_id = resource
+                except Exception:
+                    continue
+                if model_name == cls.__name__ and rec_id:
+                    page_ids.add(rec_id)
         if not page_ids:
             return []
         return cls.search([
-                ('id', 'in', page_ids),
+                ('id', 'in', list(page_ids)),
+                ('state', '=', 'published'),
                 ])
 
     @classmethod
@@ -330,85 +366,18 @@ class Page(Workflow, ModelSQL, ModelView):
         return uris
 
     @classmethod
-    def _fill_uris(cls, uris, name, site=None, state='published', force=False):
-        langs = cls._site_lang_codes(site)
-        changed = []
-        for uri in uris or []:
-            language = getattr(uri, 'language', None)
-            if not language:
-                continue
-            if language.code not in langs:
-                continue
-            if uri.uri and not force:
-                continue
-            uri.uri = cls._uri_from_name(name, language.code, state=state)
-            changed.append(uri)
-        return changed
-
-    @fields.depends('name', 'site', 'state', 'uris')
-    def on_change_name(self):
-        if not self.uris:
-            self.uris = self._default_uris(
-                self.name, self.site, state=self.state or 'draft')
-        else:
-            self._fill_uris(
-                self.uris, self.name, self.site, state=self.state or 'draft')
-
-    @classmethod
-    def create(cls, vlist):
-        vlist = [values.copy() for values in vlist]
-        pages = super().create(vlist)
-        cls._create_default_uris(pages)
-        return pages
-
-    @classmethod
     def delete(cls, pages):
         cls._delete_generated_uris(pages)
         super().delete(pages)
 
     @classmethod
-    def _create_default_uris(cls, pages):
-        if not pages:
-            return
-        pool = Pool()
-        PageURI = pool.get('www.page.uri')
-        to_create = []
-        for page in pages:
-            if page.uris:
-                continue
-            to_create.extend({
-                'page': page.id,
-                'language': uri['language'],
-                'uri': uri['uri'],
-            } for uri in cls._default_uris(
-                page.name, page.site, state=page.state or 'draft'))
-        if to_create:
-            PageURI.create(to_create)
-
-    @classmethod
-    def _sync_page_uris(cls, pages, force=False):
-        pool = Pool()
-        PageURI = pool.get('www.page.uri')
-        changed = []
-        for page in pages:
-            changed.extend(cls._fill_uris(
-                page.uris, page.name, page.site,
-                state=page.state or 'draft', force=force))
-        if changed:
-            PageURI.save(changed)
-
-    @classmethod
     def write(cls, pages, values, *args):
         values = values.copy()
         super().write(pages, values, *args)
-        pages_without_uris = [page for page in pages if not page.uris]
-        if pages_without_uris:
-            cls._create_default_uris(pages_without_uris)
         if 'state' in values:
-            cls._sync_page_uris(pages, force=True)
             cls.generate_uri(pages)
-        elif 'name' in values:
-            cls._sync_page_uris(pages)
+        elif 'name' in values or 'site' in values:
+            cls.generate_uri(pages)
 
     @classmethod
     def validate(cls, pages):
@@ -417,7 +386,17 @@ class Page(Workflow, ModelSQL, ModelView):
             page.check_main_uri()
 
     def check_main_uri(self):
-        if sum(bool(uri.main_uri) for uri in self.uris) > 1:
+        pool = Pool()
+        URI = pool.get('www.uri')
+        if not getattr(self, 'id', None) or not getattr(self, 'site', None):
+            return
+        resource_ref = f'{self.__name__},{self.id}'
+        main_uris = URI.search([
+                ('site', '=', self.site.id),
+                ('resource', '=', resource_ref),
+                ('main_uri', '=', None),
+                ])
+        if len(main_uris) > 1:
             raise UserError(
                 gettext('voyager_cms.msg_page_main_uri_unique',
                   page=self.rec_name)
@@ -448,16 +427,15 @@ class Page(Workflow, ModelSQL, ModelView):
                       page=page.rec_name)
                 )
             resource_ref = f'{page.__name__},{page.id}'
-
-            if not page.uris:
-                cls._create_default_uris([page])
-                page = cls.search([('id', '=', page.id)], limit=1)[0]
-
-            changed = cls._fill_uris(
-                page.uris, page.name, page.site,
-                state=page.state or 'draft')
-            if changed:
-                pool.get('www.page.uri').save(changed)
+            desired_rows = cls._default_uris(
+                page.name, page.site, state=page.state or 'draft')
+            desired_uris = [
+                (row.get('uri'), row.get('language'))
+                for row in desired_rows
+                if row.get('uri') and row.get('language')
+            ]
+            if not desired_uris:
+                continue
 
             existing_uris = {}
             existing_uris_by_language = {}
@@ -473,15 +451,15 @@ class Page(Workflow, ModelSQL, ModelView):
             new_uris = []
             main_uri = None
 
-            for uri_row in page.uris:
-                if not uri_row.uri or not uri_row.language:
-                    continue
-                code = uri_row.language.code
+            Lang = pool.get('ir.lang')
+            for uri_value, language_id in desired_uris:
+                language = Lang(language_id)
+                code = language.code if language else None
                 site_langs = cls._site_lang_codes(page.site)
                 if code not in site_langs:
                     continue
 
-                key = (uri_row.uri, code)
+                key = (uri_value, code)
 
                 if key in existing_uris:
                     uri = existing_uris.pop(key)
@@ -496,12 +474,12 @@ class Page(Workflow, ModelSQL, ModelView):
                     uri.resource = resource_ref
 
                 uri.site = page.site
-                uri.uri = uri_row.uri
-                uri.language = uri_row.language
+                uri.uri = uri_value
+                uri.language = language
                 uri.endpoint = endpoint
 
                 new_uris.append(uri)
-                if uri_row.main_uri:
+                if main_uri is None:
                     main_uri = uri
 
             for uri in new_uris:
@@ -615,45 +593,6 @@ class Page(Workflow, ModelSQL, ModelView):
     @fields.depends('id')
     def get_preview_filename(self, name=None):
         return f'page-preview-{self.id or "new"}.html'
-
-
-class PageURI(ModelSQL, ModelView):
-    __name__ = 'www.page.uri'
-
-    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE',
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
-    language = fields.Many2One('ir.lang', 'Idioma', required=True,
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
-    uri = fields.Char('URI',
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
-    main_uri = fields.Boolean('Main URI',
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
-
-    @fields.depends('page', 'language', 'uri',
-        '_parent_page.name', '_parent_page.state')
-    def on_change_language(self):
-        if self.uri or not self.language:
-            return
-        name = None
-        state = 'draft'
-        if self.page and self.page.name:
-            name = self.page.name
-            state = self.page.state or 'draft'
-        if not name:
-            return
-        self.uri = Page._uri_from_name(name, self.language.code, state=state)
-
-    @fields.depends('page', 'main_uri')
-    def on_change_main_uri(self):
-        if not self.main_uri or not self.page or not self.page.uris:
-            return
-        for uri in self.page.uris:
-            if uri is not self:
-                uri.main_uri = False
-
-    def get_rec_name(self, name):
-        language = self.language.code if self.language else ''
-        return f'{language}: {self.uri or ""}'.strip(': ')
 
 
 class Element(sequence_ordered(), ModelSQL, ModelView):
@@ -1204,6 +1143,14 @@ class VoyagerMenu(metaclass=PoolMeta):
     def __register__(cls, module_name):
         super().__register__(module_name)
         cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'www_menu' AND column_name = 'element'
+        """)
+        has_element_column = bool(cursor.fetchone())
+        if not has_element_column:
+            return
         cursor.execute("""
             UPDATE www_menu
             SET element = component
