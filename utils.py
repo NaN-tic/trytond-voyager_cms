@@ -368,12 +368,17 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     page = fields.Many2One('www.page', 'Page')
     schema = fields.One2Many('www.schema', 'component', "Schema",
         size=1, add_remove=[('component', '=', None)])
+    show_preview = fields.Boolean('Show Preview')
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
+
+    @classmethod
+    def default_show_preview(cls):
+        return True
 
     @classmethod
     def _component_model_names(cls):
