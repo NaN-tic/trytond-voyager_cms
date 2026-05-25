@@ -501,8 +501,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 menu.menus = []
                 return menu
             return None
-        if isinstance(field, fields.One2Many):
-            return []
 
         if isinstance(field, fields.Selection):
             return cls._preview_selection_value(field_name, field)
@@ -530,7 +528,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     'write_uid', 'write_date', 'rec_name', 'model_name'}:
                 continue
             value = cls._preview_value_for_field(field_name, field)
-            if value is not None or isinstance(field, fields.Many2One):
+            if value is not None:
                 setattr(schema, field_name, value)
         return schema
 
@@ -546,12 +544,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 continue
             if not hasattr(schema, field_name):
                 continue
-            field = preview_schema._fields.get(field_name)
             value = getattr(schema, field_name)
-            if isinstance(field, fields.Many2One) and value is False:
-                value = None
-            if isinstance(field, fields.One2Many) and value in (None, False):
-                value = []
             if value is None:
                 continue
             if isinstance(value, str) and value == '':
