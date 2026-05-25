@@ -1,40 +1,193 @@
 from datetime import date
-from pathlib import Path
 from xml.sax.saxutils import escape
 
 from dominate.tags import div
 from dominate.util import raw
+from werkzeug.exceptions import HTTPException
+from trytond.config import config
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
-from slugify import slugify
 
-from trytond.model import ModelSQL, ModelView, fields, sequence_ordered
+from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
 from trytond.pool import Pool, PoolMeta
 from trytond.exceptions import UserError
 from trytond.i18n import gettext
-from trytond.modules.voyager.voyager import Endpoint, VoyagerContext
-from trytond.pyson import Eval
+from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
+from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
 from trytond.url import http_host
-from werkzeug.wrappers import Response
 
 LANGS = ['es', 'en', 'ca']
+PAGE_STATES = {'readonly': Eval('state') != 'draft'}
+PAGE_DEPENDS = ['state']
+CHILD_PAGE_STATES = {
+    'readonly': Bool(Eval('page'))
+    & (Eval('_parent_page', {}).get('state') != 'draft')
+}
+CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
+CHILD_PAGES_STATES = {'readonly': Eval('page_state') != 'draft'}
+CHILD_PAGES_DEPENDS = ['page_state']
+CHILD_PAGES_DEFENDS = CHILD_PAGES_DEPENDS
 
-DEFAULT_BACKGROUND_COLOR = '#F8FAFC'
+
+def _safe_related(record, name):
+    try:
+        return getattr(record, name, None)
+    except Exception:
+        return None
 
 
-class Page(ModelSQL, ModelView):
+def _render_layout_instance(layout, content, title):
+    if layout is None:
+        return content.render() if hasattr(content, 'render') else str(content or '')
+
+    layout.content = content
+    layout.title = title
+    if hasattr(layout, 'main'):
+        try:
+            layout.main.children = []
+        except Exception:
+            pass
+        try:
+            layout.main.add(content)
+        except Exception:
+            pass
+    return layout.render()
+
+
+class _PreviewAdapter:
+
+    @staticmethod
+    def build(endpoint, values=None):
+        return '#'
+
+
+class _PreviewEndpointArgs(dict):
+
+    def __missing__(self, key):
+        return []
+
+
+class _PreviewCache(dict):
+
+    def set(self, key, value):
+        self[key] = value
+
+
+class _PreviewPlaceholder:
+
+    def __init__(self, **values):
+        self.__dict__.update(values)
+
+    def __getattr__(self, name):
+        value = self.__dict__.get(name)
+        if value is None:
+            value = self.__class__()
+            self.__dict__[name] = value
+        return value
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __bool__(self):
+        return False
+
+    def __iter__(self):
+        return iter(())
+
+    def __call__(self, *args, **kwargs):
+        return self.__class__()
+
+    def __str__(self):
+        return ''
+
+    def __repr__(self):
+        return 'PreviewPlaceholder()'
+
+
+def _build_preview_voyager_context(site):
+    return VoyagerContext(
+        site=site,
+        session=_PreviewPlaceholder(preview=True),
+        cache=_PreviewCache(),
+        request=_PreviewPlaceholder(preview=True),
+        adapter=_PreviewAdapter(),
+        endpoint_args=_PreviewEndpointArgs(),
+        web_prefix='',
+    )
+
+
+def _get_voyager_context(site=None, preview=False):
+    current = Transaction().context.get('voyager_context')
+    default = (
+        _build_preview_voyager_context(site)
+        if preview else VoyagerContext(site=site)
+    )
+    if not current:
+        return default
+    return VoyagerContext(
+        site=site or getattr(current, 'site', None),
+        session=(
+            getattr(current, 'session', None)
+            if getattr(current, 'session', None) is not None
+            else getattr(default, 'session', None)
+        ),
+        cache=(
+            getattr(current, 'cache', None)
+            if getattr(current, 'cache', None) is not None
+            else getattr(default, 'cache', None)
+        ),
+        request=(
+            getattr(current, 'request', None)
+            if getattr(current, 'request', None) is not None
+            else getattr(default, 'request', None)
+        ),
+        adapter=(
+            getattr(current, 'adapter', None)
+            if getattr(current, 'adapter', None) is not None
+            else getattr(default, 'adapter', None)
+        ),
+        endpoint_args=(
+            getattr(current, 'endpoint_args', None)
+            if getattr(current, 'endpoint_args', None) is not None
+            else getattr(default, 'endpoint_args', None)
+        ),
+        web_prefix=(
+            getattr(current, 'web_prefix', None)
+            if getattr(current, 'web_prefix', None) is not None
+            else getattr(default, 'web_prefix', None)
+        ),
+    )
+
+
+class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
-    name = fields.Char('Name', required=True)
-    site = fields.Many2One('www.site', 'Site', required=True)
+    name = fields.Char('Name', required=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE',
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    # links a published page back to its draft
+    origin_page = fields.Many2One(
+        'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
+    # links a draft page to its current published copy
+    published_page = fields.Many2One(
+        'www.page', 'Published Page', readonly=True, ondelete='SET NULL')
+    # current workflow state of the page
+    state = fields.Selection([
+            ('draft', 'Draft'),
+            ('published', 'Published'),
+            ], 'State', readonly=True, required=True, sort=False)
     uris = fields.One2Many(
         'www.page.uri', 'page', 'URIs',
         order=[('id', 'ASC')],
+        states=PAGE_STATES, depends=PAGE_DEPENDS,
     )
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
+        states=PAGE_STATES, depends=PAGE_DEPENDS,
     )
     preview = fields.Function(
         fields.Binary('Page Preview', filename='preview_filename'),
@@ -44,26 +197,121 @@ class Page(ModelSQL, ModelView):
         'get_preview_filename')
 
     @classmethod
-    def _uri_from_name(cls, name, code):
+    def __setup__(cls):
+        super().__setup__()
+        cls._transitions |= set((
+                ('draft', 'published'),
+                ('published', 'draft'),
+                ))
+        cls._buttons.update({
+            'generate_uri': {},
+            'publish': {
+                'invisible': Eval('state') != 'draft',
+                'depends': ['state'],
+                },
+            'draft': {
+                'invisible': Eval('state') != 'published',
+                'depends': ['state'],
+                },
+        })
+
+    @staticmethod
+    def default_state():
+        return 'draft'
+
+    @classmethod
+    def _delete_generated_uris(cls, pages):
+        if not pages:
+            return
+        pool = Pool()
+        URI = pool.get('www.uri')
+        resources = [f'{page.__name__},{page.id}' for page in pages if page.id]
+        if resources:
+            uris = URI.search([
+                    ('resource', 'in', resources),
+                    ])
+            if uris:
+                URI.delete(uris)
+
+    @classmethod
+    def _find_published_pages_to_replace(cls, page):
+        # finds the published copy that must be removed before publishing again
+        pool = Pool()
+        PageURI = pool.get('www.page.uri')
+        if page.published_page:
+            return [page.published_page]
+        if not getattr(page, 'id', None):
+            return []
+        published_pages = cls.search([
+                ('origin_page', '=', page.id),
+                ('state', '=', 'published'),
+                ])
+        if published_pages:
+            return published_pages
+        target_uris = [
+            uri['uri']
+            for uri in cls._default_uris(page.name, page.site, state='published')
+            if uri.get('uri')
+            ]
+        if not target_uris or not getattr(page, 'site', None):
+            return []
+        page_uris = PageURI.search([
+                ('page.site', '=', page.site.id),
+                ('page.state', '=', 'published'),
+                ('page', '!=', page.id),
+                ('uri', 'in', target_uris),
+                ])
+        page_ids = list({uri.page.id for uri in page_uris if getattr(uri, 'page', None)})
+        if not page_ids:
+            return []
+        return cls.search([
+                ('id', 'in', page_ids),
+                ])
+
+    @classmethod
+    def _state_uri_prefix(cls, state):
+        state = state or 'draft'
+        if state == 'published':
+            return ''
+        return f'/{state}'
+
+    @classmethod
+    def _uri_from_name(cls, name, code, state='published'):
         if not name:
             return None
         base = name.lower().replace(' ', '-').replace('/', '-')
         if not base:
             return None
-        return f'/{code}/{base}'
+        prefix = cls._state_uri_prefix(state)
+        return f'{prefix}/{code}/{base}'
 
     @classmethod
-    def _default_uris(cls, name, site=None):
-        langs = LANGS
-        if site and hasattr(site, 'id') and site.id:
+    def _site_lang_codes(cls, site):
+        if not site:
+            return LANGS[:]
+        langs = []
+        if getattr(site, 'langs', None):
+            langs = [
+                lang.code for lang in site.langs
+                if getattr(lang, 'code', None)
+            ]
+        elif hasattr(site, 'id') and site.id:
             try:
                 pool = Pool()
                 SiteLang = pool.get('www.site.lang')
                 site_langs = SiteLang.search([('site', '=', site.id)])
-                if site_langs:
-                    langs = [sl.language.code for sl in site_langs]
+                langs = [
+                    sl.language.code for sl in site_langs
+                    if getattr(sl, 'language', None)
+                    and getattr(sl.language, 'code', None)
+                ]
             except Exception:
                 pass
+        return langs or LANGS[:]
+
+    @classmethod
+    def _default_uris(cls, name, site=None, state='published'):
+        langs = cls._site_lang_codes(site)
         pool = Pool()
         Lang = pool.get('ir.lang')
         languages = {
@@ -77,39 +325,34 @@ class Page(ModelSQL, ModelView):
                 continue
             uris.append({
                 'language': language.id,
-                'uri': cls._uri_from_name(name, code),
+                'uri': cls._uri_from_name(name, code, state=state),
             })
         return uris
 
     @classmethod
-    def _fill_uris(cls, uris, name, site=None):
-        langs = LANGS
-        if site and hasattr(site, 'id') and site.id:
-            try:
-                pool = Pool()
-                SiteLang = pool.get('www.site.lang')
-                site_langs = SiteLang.search([('site', '=', site.id)])
-                if site_langs:
-                    langs = [sl.language.code for sl in site_langs]
-            except Exception:
-                pass
+    def _fill_uris(cls, uris, name, site=None, state='published', force=False):
+        langs = cls._site_lang_codes(site)
         changed = []
         for uri in uris or []:
             language = getattr(uri, 'language', None)
-            if not language or uri.uri:
+            if not language:
                 continue
             if language.code not in langs:
                 continue
-            uri.uri = cls._uri_from_name(name, language.code)
+            if uri.uri and not force:
+                continue
+            uri.uri = cls._uri_from_name(name, language.code, state=state)
             changed.append(uri)
         return changed
 
-    @fields.depends('name', 'site')
+    @fields.depends('name', 'site', 'state', 'uris')
     def on_change_name(self):
         if not self.uris:
-            self.uris = self._default_uris(self.name, self.site)
+            self.uris = self._default_uris(
+                self.name, self.site, state=self.state or 'draft')
         else:
-            self._fill_uris(self.uris, self.name, self.site)
+            self._fill_uris(
+                self.uris, self.name, self.site, state=self.state or 'draft')
 
     @classmethod
     def create(cls, vlist):
@@ -117,6 +360,11 @@ class Page(ModelSQL, ModelView):
         pages = super().create(vlist)
         cls._create_default_uris(pages)
         return pages
+
+    @classmethod
+    def delete(cls, pages):
+        cls._delete_generated_uris(pages)
+        super().delete(pages)
 
     @classmethod
     def _create_default_uris(cls, pages):
@@ -130,11 +378,24 @@ class Page(ModelSQL, ModelView):
                 continue
             to_create.extend({
                 'page': page.id,
-                'language': uri.language.id,
-                'uri': uri.uri,
-            } for uri in cls._default_uris(page.name, page.site))
+                'language': uri['language'],
+                'uri': uri['uri'],
+            } for uri in cls._default_uris(
+                page.name, page.site, state=page.state or 'draft'))
         if to_create:
             PageURI.create(to_create)
+
+    @classmethod
+    def _sync_page_uris(cls, pages, force=False):
+        pool = Pool()
+        PageURI = pool.get('www.page.uri')
+        changed = []
+        for page in pages:
+            changed.extend(cls._fill_uris(
+                page.uris, page.name, page.site,
+                state=page.state or 'draft', force=force))
+        if changed:
+            PageURI.save(changed)
 
     @classmethod
     def write(cls, pages, values, *args):
@@ -143,21 +404,11 @@ class Page(ModelSQL, ModelView):
         pages_without_uris = [page for page in pages if not page.uris]
         if pages_without_uris:
             cls._create_default_uris(pages_without_uris)
-        if 'name' in values:
-            pool = Pool()
-            PageURI = pool.get('www.page.uri')
-            changed = []
-            for page in pages:
-                changed.extend(cls._fill_uris(page.uris, page.name, page.site))
-            if changed:
-                PageURI.save(changed)
-
-    @classmethod
-    def __setup__(cls):
-        super().__setup__()
-        cls._buttons.update({
-            'generate_uri': {},
-        })
+        if 'state' in values:
+            cls._sync_page_uris(pages, force=True)
+            cls.generate_uri(pages)
+        elif 'name' in values:
+            cls._sync_page_uris(pages)
 
     @classmethod
     def validate(cls, pages):
@@ -178,7 +429,6 @@ class Page(ModelSQL, ModelView):
         pool = Pool()
         URI = pool.get('www.uri')
         Model = pool.get('ir.model')
-        SiteLang = pool.get('www.site.lang')
 
         endpoint_model = Model.search(
             [('name', '=', 'www.content.wrapper')],
@@ -203,17 +453,22 @@ class Page(ModelSQL, ModelView):
                 cls._create_default_uris([page])
                 page = cls.search([('id', '=', page.id)], limit=1)[0]
 
-            changed = cls._fill_uris(page.uris, page.name, page.site)
+            changed = cls._fill_uris(
+                page.uris, page.name, page.site,
+                state=page.state or 'draft')
             if changed:
                 pool.get('www.page.uri').save(changed)
 
-            existing_uris = {
-                (uri.uri, uri.language.code if uri.language else None): uri
-                for uri in URI.search([
+            existing_uris = {}
+            existing_uris_by_language = {}
+            for uri in URI.search([
                     ('resource', '=', resource_ref),
                     ('site', '=', page.site.id),
-                ])
-            }
+                ]):
+                code = uri.language.code if uri.language else None
+                existing_uris[(uri.uri, code)] = uri
+                if code:
+                    existing_uris_by_language[code] = uri
 
             new_uris = []
             main_uri = None
@@ -222,14 +477,7 @@ class Page(ModelSQL, ModelView):
                 if not uri_row.uri or not uri_row.language:
                     continue
                 code = uri_row.language.code
-                site_langs = LANGS
-                if page.site and hasattr(page.site, 'id') and page.site.id:
-                    try:
-                        site_lang_records = SiteLang.search([('site', '=', page.site.id)])
-                        if site_lang_records:
-                            site_langs = [sl.language.code for sl in site_lang_records]
-                    except Exception:
-                        pass
+                site_langs = cls._site_lang_codes(page.site)
                 if code not in site_langs:
                     continue
 
@@ -237,6 +485,12 @@ class Page(ModelSQL, ModelView):
 
                 if key in existing_uris:
                     uri = existing_uris.pop(key)
+                    existing_uris_by_language.pop(code, None)
+                elif code in existing_uris_by_language:
+                    uri = existing_uris_by_language.pop(code)
+                    existing_uris.pop(
+                        (uri.uri, uri.language.code if uri.language else None),
+                        None)
                 else:
                     uri = URI()
                     uri.resource = resource_ref
@@ -256,11 +510,66 @@ class Page(ModelSQL, ModelView):
                 else:
                     uri.main_uri = main_uri
 
+            conflicting_uris = []
+            new_uri_ids = {uri.id for uri in new_uris if getattr(uri, 'id', None)}
+            for uri in new_uris:
+                duplicates = URI.search([
+                        ('site', '=', page.site.id),
+                        ('uri', '=', uri.uri),
+                        ('id', 'not in', list(new_uri_ids) or [-1]),
+                        ], limit=10)
+                for duplicate in duplicates:
+                    if duplicate.id not in {u.id for u in conflicting_uris}:
+                        conflicting_uris.append(duplicate)
+            if conflicting_uris:
+                URI.delete(conflicting_uris)
+
             if new_uris:
                 URI.save(new_uris)
-
             if existing_uris:
                 URI.delete(list(existing_uris.values()))
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('published')
+    def publish(cls, pages):
+        # turns the current draft into the new published page
+        for page in pages:
+            old_published_pages = cls._find_published_pages_to_replace(page)
+            if old_published_pages:
+                cls._delete_generated_uris(old_published_pages)
+                cls.delete(old_published_pages)
+            cls.write([page], {
+                    'origin_page': None,
+                    'published_page': None,
+                    })
+
+    @classmethod
+    def _freeze_published_copy(cls, page):
+        # keeps a frozen published copy while the current page goes back to draft
+        if page.origin_page and page.origin_page.state == 'draft':
+            return page
+        old_published_pages = cls._find_published_pages_to_replace(page)
+        if old_published_pages:
+            cls._delete_generated_uris(old_published_pages)
+            cls.delete(old_published_pages)
+        published_page, = cls.copy([page], default={
+                'state': 'published',
+                'origin_page': page.id,
+                'published_page': None,
+                })
+        cls._sync_page_uris([published_page], force=True)
+        cls.generate_uri([published_page])
+        cls.write([page], {'published_page': published_page.id})
+        return published_page
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('draft')
+    def draft(cls, pages):
+        # creates the frozen published copy and keeps editing on the same page
+        for page in pages:
+            cls._freeze_published_copy(page)
 
     @staticmethod
     def _preview_message(message):
@@ -275,21 +584,8 @@ class Page(ModelSQL, ModelView):
         pool = Pool()
         Wrapper = pool.get('www.content.wrapper')
         site = page.site if page and page.site else None
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site or getattr(voyager_context, 'site', None),
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
         with Transaction().set_context(
-                voyager_context=voyager_context,
+                voyager_context=_build_preview_voyager_context(site),
                 voyager_cms_preview=True):
             rendered = Wrapper(page=page).render()
         if hasattr(rendered, 'render'):
@@ -324,21 +620,28 @@ class Page(ModelSQL, ModelView):
 class PageURI(ModelSQL, ModelView):
     __name__ = 'www.page.uri'
 
-    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE')
-    language = fields.Many2One('ir.lang', 'Idioma', required=True)
-    uri = fields.Char('URI')
-    main_uri = fields.Boolean('Main URI')
+    page = fields.Many2One('www.page', 'Page', required=True, ondelete='CASCADE',
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    language = fields.Many2One('ir.lang', 'Idioma', required=True,
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    uri = fields.Char('URI',
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    main_uri = fields.Boolean('Main URI',
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
 
-    @fields.depends('page', 'language', 'uri', '_parent_page.name')
+    @fields.depends('page', 'language', 'uri',
+        '_parent_page.name', '_parent_page.state')
     def on_change_language(self):
         if self.uri or not self.language:
             return
         name = None
+        state = 'draft'
         if self.page and self.page.name:
             name = self.page.name
+            state = self.page.state or 'draft'
         if not name:
             return
-        self.uri = Page._uri_from_name(name, self.language.code)
+        self.uri = Page._uri_from_name(name, self.language.code, state=state)
 
     @fields.depends('page', 'main_uri')
     def on_change_main_uri(self):
@@ -350,24 +653,75 @@ class PageURI(ModelSQL, ModelView):
 
     def get_rec_name(self, name):
         language = self.language.code if self.language else ''
-        return f'{language}: {self.uri or ""}'.strip(': ')  
+        return f'{language}: {self.uri or ""}'.strip(': ')
 
 
 class Element(sequence_ordered(), ModelSQL, ModelView):
     __name__ = 'www.element'
-    _table = 'www_component'
 
-    name = fields.Char('Name', required=True)
-    model = fields.Many2One('ir.model', 'Model', required=True)
-    page = fields.Many2One('www.page', 'Page')
+    name = fields.Char('Name', required=True,
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    model = fields.Many2One('ir.model', 'Model', required=True,
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    page = fields.Many2One('www.page', 'Page', ondelete='CASCADE',
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    page_state = fields.Function(fields.Char('Page State'),
+        'on_change_with_page_state')
     schema = fields.One2Many('www.schema', 'component', "Schema",
-        size=1, add_remove=[('component', '=', None)])
+        size=1, add_remove=[('component', '=', None)],
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
         'get_preview')
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
+
+    @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cls._migrate_legacy_component_rows()
+
+    @classmethod
+    def _migrate_legacy_component_rows(cls):
+        # keeps old component rows available from the new www.element table
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            INSERT INTO www_element (
+                id, create_date, create_uid, model, name, page,
+                sequence, write_date, write_uid           )
+            SELECT
+                c.id, c.create_date, c.create_uid, c.model, c.name, c.page,
+                c.sequence, c.write_date, c.write_uid
+            FROM www_component c
+            LEFT JOIN www_element e ON e.id = c.id
+            WHERE e.id IS NULL
+        """)
+        cursor.execute("""
+            SELECT setval(
+                pg_get_serial_sequence('www_element', 'id'),
+                GREATEST(COALESCE((SELECT MAX(id) FROM www_element), 1), 1),
+                true
+            )
+        """)
+ 
+    @fields.depends('page', '_parent_page.state')
+    def on_change_with_page_state(self, name=None):
+        if self.page:
+            return self.page.state
+        return None
+
+    @classmethod
+    def delete(cls, elements):
+        pool = Pool()
+        Schema = pool.get('www.schema')
+        schemas = [
+            schema for element in elements
+            for schema in (getattr(element, 'schema', None) or [])
+        ]
+        if schemas:
+            Schema.delete(schemas)
+        super().delete(elements)
 
     @classmethod
     def _preview_image(cls):
@@ -382,27 +736,15 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         )
 
     @classmethod
-    def _preview_text_value(cls, field_name, field):
-        field_name = field_name.lower()
-        string = getattr(field, 'string', '') or field_name.replace('_', ' ')
-        if 'title' in field_name:
-            return f'Preview {string}'.strip()
-        if 'subtitle' in field_name:
-            return f'Sample {string}'.strip()
-        if field_name.startswith('text') or 'description' in field_name:
-            return (
-                f'Preview content for {string}. This placeholder is shown '
-                'until a schema with real content is assigned.'
-            )
-        if 'alt' in field_name:
-            return 'Preview image'
-        if 'url' in field_name or 'href' in field_name or 'link' in field_name:
-            return '#'
-        if 'icon' in field_name:
-            return 'M12 4v16m8-8H4'
-        if 'color' in field_name:
-            return DEFAULT_BACKGROUND_COLOR
-        return f'Preview {string}'.strip()
+    def _preview_char_value(cls, field):
+        return 'Preview'
+
+    @classmethod
+    def _preview_text_value(cls, field):
+        return (
+            'Preview content. This placeholder is shown until a schema with '
+            'real content is assigned.'
+        )
 
     @classmethod
     def _preview_selection_value(cls, field_name, field):
@@ -452,8 +794,12 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             return 3
         if numeric_types and isinstance(field, numeric_types):
             return 3
-        if isinstance(field, (fields.Char, fields.Text)):
-            return cls._preview_text_value(field_name, field)
+        if isinstance(field, fields.Binary):
+            return cls._preview_image().encode('utf-8')
+        if isinstance(field, fields.Char):
+            return cls._preview_char_value(field)
+        if isinstance(field, fields.Text):
+            return cls._preview_text_value(field)
         return None
 
     @classmethod
@@ -504,9 +850,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if (
                 Transaction().context.get('voyager_cms_preview')
                 and 'schema' in getattr(model, '_fields', {})):
-            if schema:
-                return schema
-            return cls._build_preview_schema()
+            return cls._build_preview_schema_with_values(schema)
         if provided_schema:
             return schema
         if schema:
@@ -568,30 +912,19 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if not site:
             return content
 
+        preview = bool(Transaction().context.get('voyager_cms_preview'))
         pool = Pool()
-        Element = pool.get('www.element')
-        layout_component = getattr(site, 'layout', None)
+        layout_component = _safe_related(site, 'layout')
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
             layout = LayoutModel(
                 **cls.get_element_kwargs(
                     LayoutModel, layout_component.schema))
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site,
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
-        with Transaction().set_context(voyager_context=voyager_context):
-            if site and not preview_chrome:
+        with Transaction().set_context(
+                voyager_context=_get_voyager_context(site, preview=preview),
+                voyager_cms_preview=preview):
+            if preview and site and not preview_chrome:
                 with div() as wrapped:
                     header_component = getattr(site, 'header', None)
                     if header_component and header_component.model:
@@ -627,21 +960,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 content = wrapped
             if layout is None:
                 return content
-            try:
-                rendered = layout.render(content=content, title=title)
-            except TypeError as exc:
-                if "unexpected keyword argument 'content'" not in str(exc):
-                    raise
-                try:
-                    rendered = layout.render(content, title=title)
-                except TypeError as nested_exc:
-                    if "unexpected keyword argument 'title'" not in str(nested_exc):
-                        raise
-                    if hasattr(layout, 'main'):
-                        layout.main.add(content)
-                    if hasattr(layout, 'title'):
-                        layout.title = title
-                    rendered = layout.render()
+            rendered = _render_layout_instance(layout, content, title)
         return rendered
 
     @classmethod
@@ -659,21 +978,8 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     @classmethod
     def render_preview_content(cls, element):
         site = element.page.site if element.page and element.page.site else None
-        voyager_context = Transaction().context.get('voyager_context')
-        if voyager_context:
-            voyager_context = VoyagerContext(
-                site=site or getattr(voyager_context, 'site', None),
-                session=getattr(voyager_context, 'session', None),
-                cache=getattr(voyager_context, 'cache', None),
-                request=getattr(voyager_context, 'request', None),
-                adapter=getattr(voyager_context, 'adapter', None),
-                endpoint_args=getattr(voyager_context, 'endpoint_args', None),
-                web_prefix=getattr(voyager_context, 'web_prefix', None),
-            )
-        else:
-            voyager_context = VoyagerContext(site=site)
         with Transaction().set_context(
-                voyager_context=voyager_context,
+                voyager_context=_get_voyager_context(site, preview=True),
                 voyager_cms_preview=True):
             rendered = cls.render_element_content(
                 element.model.name, element.schema)
@@ -722,10 +1028,59 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
 class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
-    component = fields.Many2One('www.element', 'Element')
-    icon = fields.Char('Icon')
+    component = fields.Many2One('www.element', 'Element',
+        ondelete='CASCADE')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
+    page_state = fields.Function(fields.Char('Page State'),
+        'on_change_with_page_state')
+    visible_fields = fields.Function(
+        fields.MultiSelection('get_schema_fields', 'Visible Fields'),
+        'on_change_with_visible_fields')
+
+    @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            UPDATE www_schema
+            SET element = component
+            WHERE element IS NULL AND component IS NOT NULL
+        """)
+
+    @classmethod
+    def _schema_content_fields(cls):
+        return [
+            name for name, field in cls._fields.items()
+            if 'visible_fields' in (getattr(field, 'depends', []) or [])
+            ]
+
+    @classmethod
+    def get_schema_fields(cls):
+        return [(name, cls._fields[name].string or name)
+            for name in cls._schema_content_fields()]
+
+    @classmethod
+    def _schema_fields_for_model(cls, model_name):
+        content_fields = cls._schema_content_fields()
+        if not model_name:
+            return content_fields
+
+        try:
+            component = Pool().get(model_name)
+        except Exception:
+            return content_fields
+        fields_ = getattr(component, '__fields__', None)
+        if callable(fields_):
+            fields_ = fields_()
+        if isinstance(fields_, str):
+            fields_ = [fields_]
+        fields_ = [name for name in (fields_ or []) if name in content_fields]
+        if 'background' in content_fields and 'background' not in fields_:
+            fields_.append('background')
+        if fields_:
+            return fields_
+        return content_fields
 
     @fields.depends('component', '_parent_component.model')
     def on_change_with_model_name(self, name=None):
@@ -733,11 +1088,25 @@ class Schema(ModelSQL, ModelView):
             return self.component.model.name
         return None
 
+    @fields.depends('component', '_parent_component.page_state')
+    def on_change_with_page_state(self, name=None):
+        if self.component:
+            return self.component.page_state
+        return None
+
+    @fields.depends('component', '_parent_component.model')
+    def on_change_with_visible_fields(self, name=None):
+        model_name = None
+        if self.component and self.component.model:
+            model_name = self.component.model.name
+        return self._schema_fields_for_model(model_name)
+
 
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
     _url = '/content-wrapper'
-    _type = 'www'
+    #TODO: what we do with the type??
+    _type = []
     page = fields.Many2One('www.page', 'Page')
 
     def get_not_found_content(self):
@@ -751,7 +1120,7 @@ class ContentWrapper(Endpoint):
     def render(self):
         pool = Pool()
         Element = pool.get('www.element')
-        layout_component = self.site.layout
+        layout_component = _safe_related(self.site, 'layout') if self.site else None
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
@@ -762,7 +1131,7 @@ class ContentWrapper(Endpoint):
         def _render_layout(content, title):
             if self.site:
                 with div() as wrapped:
-                    header_component = getattr(self.site, 'header', None)
+                    header_component = _safe_related(self.site, 'header')
                     if header_component and header_component.model:
                         try:
                             HeaderModel = pool.get(header_component.model.name)
@@ -777,7 +1146,7 @@ class ContentWrapper(Endpoint):
                         else:
                             raw(str(content))
 
-                    footer_component = getattr(self.site, 'footer', None)
+                    footer_component = _safe_related(self.site, 'footer')
                     if footer_component and footer_component.model:
                         try:
                             FooterModel = pool.get(footer_component.model.name)
@@ -794,23 +1163,7 @@ class ContentWrapper(Endpoint):
                         except Exception:
                             pass
                 content = wrapped
-            if layout is None:
-                return content.render()
-            try:
-                return layout.render(content=content, title=title)
-            except TypeError as exc:
-                if "unexpected keyword argument 'content'" not in str(exc):
-                    raise
-                try:
-                    return layout.render(content, title=title)
-                except TypeError as nested_exc:
-                    if "unexpected keyword argument 'title'" not in str(nested_exc):
-                        raise
-                    if hasattr(layout, 'main'):
-                        layout.main.add(content)
-                    if hasattr(layout, 'title'):
-                        layout.title = title
-                    return layout.render()
+            return _render_layout_instance(layout, content, title)
 
         if not self.page:
             return _render_layout(
@@ -844,7 +1197,18 @@ class VoyagerMenu(metaclass=PoolMeta):
         states={
             'invisible': Eval('type') != 'component',
         },
-        depends=['type'])
+        depends=['type'],
+        ondelete='SET NULL')
+
+    @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            UPDATE www_menu
+            SET element = component
+            WHERE element IS NULL AND component IS NOT NULL
+        """)
 
     @classmethod
     def __setup__(cls):
@@ -855,14 +1219,131 @@ class VoyagerMenu(metaclass=PoolMeta):
 class SiteLang(ModelSQL):
     __name__ = 'www.site.lang'
 
-    site = fields.Many2One('www.site', 'Site', required=True)
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
     language = fields.Many2One('ir.lang', 'Language', required=True)
 
 
 class VoyagerSite(metaclass=PoolMeta):
     __name__ = 'www.site'
 
-    header = fields.Many2One('www.element', 'Header')
-    footer = fields.Many2One('www.element', 'Footer')
-    layout = fields.Many2One('www.element', 'Layout')
+    header = fields.Many2One('www.element', 'Header', ondelete='SET NULL')
+    footer = fields.Many2One('www.element', 'Footer', ondelete='SET NULL')
+    layout = fields.Many2One('www.element', 'Layout', ondelete='SET NULL')
     langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
+
+    @staticmethod
+    def _allow_page_state_in_environment(page):
+        # en produccio nomes deixa veure published
+        if not page:
+            return True
+        production = config.getboolean('database', 'production', default=False)
+        if production:
+            return page.state == 'published'
+        # en dev nomes deixa veure draft
+        return page.state == 'draft'
+
+    def match_request(self, request, web_prefix=None):
+        pool = Pool()
+        VoyagerURI = pool.get('www.uri')
+
+        web_map, adapter, endpoint_args, error_handlers = self.get_site_info(
+            web_prefix)
+
+        try:
+            language = None
+            request_path = request.path
+            if web_prefix:
+                request_path = request.path.replace(
+                    web_prefix, '', 1)
+
+            if self.route_method == 'uri':
+                voyager_uri = VoyagerURI.search([
+                    ('site', '=', self.id),
+                    ('uri', '=', request_path)], limit=1)
+
+                if voyager_uri:
+                    voyager_uri = voyager_uri[0]
+                    resource = voyager_uri.resource
+                    resource_model = getattr(resource, '__name__', None)
+                    if resource_model == 'www.page':
+                        # si l'estat no toca, ignora la uri
+                        if not self._allow_page_state_in_environment(resource):
+                            voyager_uri = None
+
+                if voyager_uri:
+                    endpoint = voyager_uri.endpoint.name
+                    resource = voyager_uri.resource
+                    resource_model = getattr(resource, '__name__', None)
+                    args = {}
+
+                    if not resource_model:
+                        resource_model = str(resource).split(',')[0]
+                    try:
+                        EndpointModel = pool.get(endpoint)
+                    except Exception:
+                        EndpointModel = None
+                    if EndpointModel:
+                        for field_name, field in EndpointModel._fields.items():
+                            if (isinstance(field, fields.Many2One)
+                                    and field.model_name == resource_model):
+                                args[field_name] = resource.id
+                    if voyager_uri.language:
+                        language = voyager_uri.language.code
+                else:
+                    if request.method:
+                        endpoint, args = adapter.match(request.path,
+                            request.method)
+                    else:
+                        endpoint, args = adapter.match(request.path)
+            elif self.route_method == 'endpoint':
+                if request.method:
+                    endpoint, args = adapter.match(request.path,
+                        request.method)
+                else:
+                    endpoint, args = adapter.match(request.path)
+        except HTTPException as e:
+            if e.code in error_handlers:
+                endpoint = error_handlers[e.code]
+                return (None, None, None, None, None,
+                    adapter.build(endpoint.__name__, None))
+            raise e
+        return endpoint, args, adapter, endpoint_args, language, None
+
+    @classmethod
+    def delete(cls, sites):
+        pool = Pool()
+        Page = pool.get('www.page')
+        URI = pool.get('www.uri')
+        site_ids = [site.id for site in sites if getattr(site, 'id', None)]
+
+        if site_ids:
+            pages = Page.search([
+                    ('site', 'in', site_ids),
+                    ])
+            if pages:
+                Page.delete(pages)
+
+            uris = URI.search([
+                    ('site', 'in', site_ids),
+                    ])
+            if uris:
+                URI.delete(uris)
+
+        super().delete(sites)
+
+
+class ComponentCMS(Component):
+    __fields__ = []
+
+    @staticmethod
+    def _render_child_component(name, schema=None):
+        pool = Pool()
+
+        try:
+            ComponentModel = pool.get(name)
+            if schema:
+                return ComponentModel(schema=schema).tag()
+            return ComponentModel().tag()
+        except Exception:
+            return None

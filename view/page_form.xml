@@ -1,16 +1,26 @@
 <form>
     <notebook colspan="4">
         <page string="Properties" id="properties">
-            <label name="name" xalign="0.0"/>
-            <field name="name" xexpand="1" xfill="1"/>
-            <label name="site" xalign="0.0"/>
-            <field name="site" xexpand="1" xfill="1"/>
+            <label name="name"/>
+            <field name="name"/>
+            <label name="site"/>
+            <field name="site"/>
+            <label name="state"/>
+            <field name="state"/>
+            <group col="-1" colspan="2" id="buttons">
+                <button name="draft"/>
+                <button name="publish" icon="tryton-forward"/>
+            </group>
             <field name="element" colspan="4" mode="tree,list-form,form" height="900"/>
         </page>
         <page string="Preview" id="preview">
             <field name="preview" widget="document" colspan="4" height="900"/>
         </page>
         <page string="Uris" id="uris">
+            <label name="origin_page" />
+            <field name="origin_page"/>
+            <label name="published_page" />
+            <field name="published_page"/>
             <field name="uris" colspan="4" mode="tree,form" height="250"/>
             <group id="buttons" col="1" colspan="4">
                 <button name="generate_uri"/>

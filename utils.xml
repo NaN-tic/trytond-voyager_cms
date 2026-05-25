@@ -25,7 +25,7 @@ this repository contains the full copyright notices and license terms. -->
             <field name="name">page_uri_form</field>
         </record>
         <record model="ir.action.act_window" id="act_www_page">
-            <field name="name">Pages</field>
+            <field name="name">All Pages</field>
             <field name="res_model">www.page</field>
         </record>
         <record model="ir.action.act_window.view" id="act_www_page_view1">
@@ -38,9 +38,41 @@ this repository contains the full copyright notices and license terms. -->
             <field name="view" ref="www_page_view_form"/>
             <field name="act_window" ref="act_www_page"/>
         </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_draft">
+            <field name="name">Draft</field>
+            <field name="sequence" eval="10"/>
+            <field name="domain" eval="[('state', '=', 'draft')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_page"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_published">
+            <field name="name">Published</field>
+            <field name="sequence" eval="20"/>
+            <field name="domain" eval="[('state', '=', 'published')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_page"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_page_domain_all">
+            <field name="name">All</field>
+            <field name="sequence" eval="9999"/>
+            <field name="act_window" ref="act_www_page"/>
+        </record>
         <record model="ir.model.button" id="www_page_generate_uri_button">
             <field name="name">generate_uri</field>
             <field name="string">Generate URI</field>
+            <field name="model">www.page</field>
+        </record>
+        <record model="ir.model.button" id="www_page_publish_button">
+            <field name="name">publish</field>
+            <field name="string">Publish</field>
+            <field name="model">www.page</field>
+        </record>
+        <record model="ir.model.button" id="www_page_draft_button">
+            <field name="name">draft</field>
+            <field name="string">Draft</field>
             <field name="model">www.page</field>
         </record>
 
@@ -130,7 +162,8 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <menuitem id="menu_voyager_cms" name="Voyager CMS" sequence="210"/>
-        <menuitem parent="menu_voyager_cms" action="act_www_page" id="menu_www_page"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_page"
+            name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
         <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema"/>
     </data>
