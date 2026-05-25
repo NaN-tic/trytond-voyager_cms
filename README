@@ -18,17 +18,3 @@ Copyright
 ---------
 
 See COPYRIGHT
-
-Notes
------
-
-CMS elements (`www.element`):
-
-- The `model` field is filtered dynamically to only show Tryton models that
-  behave as Voyager components (instances of `trytond.modules.voyager.voyager.Component`).
-- Preview visibility can be toggled per element with `show_preview` (default: True).
-  The preview is also hidden when the element is not linked to a page.
-- Preview schema placeholders normalize relational fields:
-  `Many2One` values are represented as `None` and `One2Many` as an empty list `[]`.
-- Site rendering now explicitly adds header/footer tags to the DOM container to
-  preserve the intended order (header above content, footer below).
