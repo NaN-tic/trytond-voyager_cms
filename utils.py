@@ -664,8 +664,10 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     if header_component and header_component.model:
                         try:
                             HeaderModel = pool.get(header_component.model.name)
-                            HeaderModel(**Element.get_element_kwargs(
+                            header_tag = HeaderModel(**Element.get_element_kwargs(
                                 HeaderModel, header_component.schema)).tag()
+                            if header_tag is not None:
+                                wrapped.add(header_tag)
                         except Exception:
                             pass
 
@@ -679,16 +681,22 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     if footer_component and footer_component.model:
                         try:
                             FooterModel = pool.get(footer_component.model.name)
-                            FooterModel(**Element.get_element_kwargs(
+                            footer_tag = FooterModel(**Element.get_element_kwargs(
                                 FooterModel, footer_component.schema)).tag()
+                            if footer_tag is not None:
+                                wrapped.add(footer_tag)
                         except Exception:
                             try:
-                                pool.get('www.footer')().tag()
+                                footer_tag = pool.get('www.footer')().tag()
+                                if footer_tag is not None:
+                                    wrapped.add(footer_tag)
                             except Exception:
                                 pass
                     else:
                         try:
-                            pool.get('www.footer')().tag()
+                            footer_tag = pool.get('www.footer')().tag()
+                            if footer_tag is not None:
+                                wrapped.add(footer_tag)
                         except Exception:
                             pass
                 content = wrapped
