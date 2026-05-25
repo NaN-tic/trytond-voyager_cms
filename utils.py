@@ -358,7 +358,13 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     _table = 'www_component'
 
     name = fields.Char('Name', required=True)
-    model = fields.Many2One('ir.model', 'Model', required=True)
+    component_models = fields.Function(
+        fields.Many2Many('ir.model', None, None, 'Component Models'),
+        'get_component_models')
+    model = fields.Many2One(
+        'ir.model', 'Model', required=True,
+        domain=[('id', 'in', Eval('component_models'))],
+        depends=['component_models'])
     page = fields.Many2One('www.page', 'Page')
     schema = fields.One2Many('www.schema', 'component', "Schema",
         size=1, add_remove=[('component', '=', None)])
@@ -368,6 +374,55 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     preview_filename = fields.Function(
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
+
+    @classmethod
+    def _component_model_names(cls):
+        """
+        Return the list of Tryton model names that are valid CMS components.
+
+        We detect components dynamically by checking if instantiating the model
+        yields an instance of the Voyager Component base class (or compatible).
+        """
+        pool = Pool()
+        try:
+            from trytond.modules.voyager.voyager import Component as ComponentCMS
+        except Exception:  # pragma: no cover
+            ComponentCMS = None
+
+        names = []
+        for model_name, model_cls in pool.iterobject(type='model'):
+            if not model_name:
+                continue
+            if model_name.startswith('ir.'):
+                continue
+            if not model_cls:
+                continue
+            if ComponentCMS is None:
+                continue
+            try:
+                instance = model_cls(render=False)
+            except Exception:
+                try:
+                    instance = model_cls()
+                except Exception:
+                    continue
+            if isinstance(instance, ComponentCMS):
+                names.append(model_name)
+        return names
+
+    @classmethod
+    def _get_component_model_ids(cls):
+        pool = Pool()
+        Model = pool.get('ir.model')
+        names = cls._component_model_names()
+        if not names:
+            return []
+        return [m.id for m in Model.search([('name', 'in', names)])]
+
+    @classmethod
+    def get_component_models(cls, elements, name):
+        model_ids = cls._get_component_model_ids()
+        return {element.id: model_ids for element in elements}
 
     @classmethod
     def _preview_image(cls):
