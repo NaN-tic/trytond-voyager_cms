@@ -3,6 +3,9 @@ from xml.sax.saxutils import escape
 
 from dominate.tags import div
 from dominate.util import raw
+from werkzeug.exceptions import HTTPException
+from trytond.config import config
+from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 
 from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
@@ -14,6 +17,7 @@ from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
 from trytond.url import http_host
 
+LANGS = ['es', 'en', 'ca']
 PAGE_STATES = {'readonly': Eval('state') != 'draft'}
 PAGE_DEPENDS = ['state']
 CHILD_PAGE_STATES = {
@@ -21,6 +25,34 @@ CHILD_PAGE_STATES = {
     & (Eval('_parent_page', {}).get('state') != 'draft')
 }
 CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
+CHILD_PAGES_STATES = {'readonly': Eval('page_state') != 'draft'}
+CHILD_PAGES_DEPENDS = ['page_state']
+CHILD_PAGES_DEFENDS = CHILD_PAGES_DEPENDS
+
+
+def _safe_related(record, name):
+    try:
+        return getattr(record, name, None)
+    except Exception:
+        return None
+
+
+def _render_layout_instance(layout, content, title):
+    if layout is None:
+        return content.render() if hasattr(content, 'render') else str(content or '')
+
+    layout.content = content
+    layout.title = title
+    if hasattr(layout, 'main'):
+        try:
+            layout.main.children = []
+        except Exception:
+            pass
+        try:
+            layout.main.add(content)
+        except Exception:
+            pass
+    return layout.render()
 
 
 class _PreviewAdapter:
@@ -82,6 +114,49 @@ def _build_preview_voyager_context(site):
         adapter=_PreviewAdapter(),
         endpoint_args=_PreviewEndpointArgs(),
         web_prefix='',
+    )
+
+
+def _get_voyager_context(site=None, preview=False):
+    current = Transaction().context.get('voyager_context')
+    default = (
+        _build_preview_voyager_context(site)
+        if preview else VoyagerContext(site=site)
+    )
+    if not current:
+        return default
+    return VoyagerContext(
+        site=site or getattr(current, 'site', None),
+        session=(
+            getattr(current, 'session', None)
+            if getattr(current, 'session', None) is not None
+            else getattr(default, 'session', None)
+        ),
+        cache=(
+            getattr(current, 'cache', None)
+            if getattr(current, 'cache', None) is not None
+            else getattr(default, 'cache', None)
+        ),
+        request=(
+            getattr(current, 'request', None)
+            if getattr(current, 'request', None) is not None
+            else getattr(default, 'request', None)
+        ),
+        adapter=(
+            getattr(current, 'adapter', None)
+            if getattr(current, 'adapter', None) is not None
+            else getattr(default, 'adapter', None)
+        ),
+        endpoint_args=(
+            getattr(current, 'endpoint_args', None)
+            if getattr(current, 'endpoint_args', None) is not None
+            else getattr(default, 'endpoint_args', None)
+        ),
+        web_prefix=(
+            getattr(current, 'web_prefix', None)
+            if getattr(current, 'web_prefix', None) is not None
+            else getattr(default, 'web_prefix', None)
+        ),
     )
 
 
@@ -213,7 +288,7 @@ class Page(Workflow, ModelSQL, ModelView):
     @classmethod
     def _site_lang_codes(cls, site):
         if not site:
-            return []
+            return LANGS[:]
         langs = []
         if getattr(site, 'langs', None):
             langs = [
@@ -232,7 +307,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 ]
             except Exception:
                 pass
-        return langs
+        return langs or LANGS[:]
 
     @classmethod
     def _default_uris(cls, name, site=None, state='published'):
@@ -602,6 +677,34 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
 
+    @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cls._migrate_legacy_component_rows()
+
+    @classmethod
+    def _migrate_legacy_component_rows(cls):
+        # keeps old component rows available from the new www.element table
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            INSERT INTO www_element (
+                id, create_date, create_uid, model, name, page,
+                sequence, write_date, write_uid           )
+            SELECT
+                c.id, c.create_date, c.create_uid, c.model, c.name, c.page,
+                c.sequence, c.write_date, c.write_uid
+            FROM www_component c
+            LEFT JOIN www_element e ON e.id = c.id
+            WHERE e.id IS NULL
+        """)
+        cursor.execute("""
+            SELECT setval(
+                pg_get_serial_sequence('www_element', 'id'),
+                GREATEST(COALESCE((SELECT MAX(id) FROM www_element), 1), 1),
+                true
+            )
+        """)
+ 
     @fields.depends('page', '_parent_page.state')
     def on_change_with_page_state(self, name=None):
         if self.page:
@@ -809,9 +912,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if not site:
             return content
 
+        preview = bool(Transaction().context.get('voyager_cms_preview'))
         pool = Pool()
-        Element = pool.get('www.element')
-        layout_component = getattr(site, 'layout', None)
+        layout_component = _safe_related(site, 'layout')
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
@@ -819,9 +922,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 **cls.get_element_kwargs(
                     LayoutModel, layout_component.schema))
         with Transaction().set_context(
-                voyager_context=_build_preview_voyager_context(site),
-                voyager_cms_preview=True):
-            if site and not preview_chrome:
+                voyager_context=_get_voyager_context(site, preview=preview),
+                voyager_cms_preview=preview):
+            if preview and site and not preview_chrome:
                 with div() as wrapped:
                     header_component = getattr(site, 'header', None)
                     if header_component and header_component.model:
@@ -857,21 +960,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 content = wrapped
             if layout is None:
                 return content
-            try:
-                rendered = layout.render(content=content, title=title)
-            except TypeError as exc:
-                if "unexpected keyword argument 'content'" not in str(exc):
-                    raise
-                try:
-                    rendered = layout.render(content, title=title)
-                except TypeError as nested_exc:
-                    if "unexpected keyword argument 'title'" not in str(nested_exc):
-                        raise
-                    if hasattr(layout, 'main'):
-                        layout.main.add(content)
-                    if hasattr(layout, 'title'):
-                        layout.title = title
-                    rendered = layout.render()
+            rendered = _render_layout_instance(layout, content, title)
         return rendered
 
     @classmethod
@@ -890,7 +979,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     def render_preview_content(cls, element):
         site = element.page.site if element.page and element.page.site else None
         with Transaction().set_context(
-                voyager_context=_build_preview_voyager_context(site),
+                voyager_context=_get_voyager_context(site, preview=True),
                 voyager_cms_preview=True):
             rendered = cls.render_element_content(
                 element.model.name, element.schema)
@@ -948,6 +1037,16 @@ class Schema(ModelSQL, ModelView):
     visible_fields = fields.Function(
         fields.MultiSelection('get_schema_fields', 'Visible Fields'),
         'on_change_with_visible_fields')
+
+    @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            UPDATE www_schema
+            SET element = component
+            WHERE element IS NULL AND component IS NOT NULL
+        """)
 
     @classmethod
     def _schema_content_fields(cls):
@@ -1021,7 +1120,7 @@ class ContentWrapper(Endpoint):
     def render(self):
         pool = Pool()
         Element = pool.get('www.element')
-        layout_component = self.site.layout
+        layout_component = _safe_related(self.site, 'layout') if self.site else None
         layout = None
         if layout_component and layout_component.model:
             LayoutModel = pool.get(layout_component.model.name)
@@ -1032,7 +1131,7 @@ class ContentWrapper(Endpoint):
         def _render_layout(content, title):
             if self.site:
                 with div() as wrapped:
-                    header_component = getattr(self.site, 'header', None)
+                    header_component = _safe_related(self.site, 'header')
                     if header_component and header_component.model:
                         try:
                             HeaderModel = pool.get(header_component.model.name)
@@ -1047,7 +1146,7 @@ class ContentWrapper(Endpoint):
                         else:
                             raw(str(content))
 
-                    footer_component = getattr(self.site, 'footer', None)
+                    footer_component = _safe_related(self.site, 'footer')
                     if footer_component and footer_component.model:
                         try:
                             FooterModel = pool.get(footer_component.model.name)
@@ -1064,23 +1163,7 @@ class ContentWrapper(Endpoint):
                         except Exception:
                             pass
                 content = wrapped
-            if layout is None:
-                return content.render()
-            try:
-                return layout.render(content=content, title=title)
-            except TypeError as exc:
-                if "unexpected keyword argument 'content'" not in str(exc):
-                    raise
-                try:
-                    return layout.render(content, title=title)
-                except TypeError as nested_exc:
-                    if "unexpected keyword argument 'title'" not in str(nested_exc):
-                        raise
-                    if hasattr(layout, 'main'):
-                        layout.main.add(content)
-                    if hasattr(layout, 'title'):
-                        layout.title = title
-                    return layout.render()
+            return _render_layout_instance(layout, content, title)
 
         if not self.page:
             return _render_layout(
@@ -1118,6 +1201,16 @@ class VoyagerMenu(metaclass=PoolMeta):
         ondelete='SET NULL')
 
     @classmethod
+    def __register__(cls, module_name):
+        super().__register__(module_name)
+        cursor = Transaction().connection.cursor()
+        cursor.execute("""
+            UPDATE www_menu
+            SET element = component
+            WHERE element IS NULL AND component IS NOT NULL
+        """)
+
+    @classmethod
     def __setup__(cls):
         super().__setup__()
         cls.type.selection.append(('component', 'Element'))
@@ -1138,6 +1231,84 @@ class VoyagerSite(metaclass=PoolMeta):
     footer = fields.Many2One('www.element', 'Footer', ondelete='SET NULL')
     layout = fields.Many2One('www.element', 'Layout', ondelete='SET NULL')
     langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
+
+    @staticmethod
+    def _allow_page_state_in_environment(page):
+        # en produccio nomes deixa veure published
+        if not page:
+            return True
+        production = config.getboolean('database', 'production', default=False)
+        if production:
+            return page.state == 'published'
+        # en dev nomes deixa veure draft
+        return page.state == 'draft'
+
+    def match_request(self, request, web_prefix=None):
+        pool = Pool()
+        VoyagerURI = pool.get('www.uri')
+
+        web_map, adapter, endpoint_args, error_handlers = self.get_site_info(
+            web_prefix)
+
+        try:
+            language = None
+            request_path = request.path
+            if web_prefix:
+                request_path = request.path.replace(
+                    web_prefix, '', 1)
+
+            if self.route_method == 'uri':
+                voyager_uri = VoyagerURI.search([
+                    ('site', '=', self.id),
+                    ('uri', '=', request_path)], limit=1)
+
+                if voyager_uri:
+                    voyager_uri = voyager_uri[0]
+                    resource = voyager_uri.resource
+                    resource_model = getattr(resource, '__name__', None)
+                    if resource_model == 'www.page':
+                        # si l'estat no toca, ignora la uri
+                        if not self._allow_page_state_in_environment(resource):
+                            voyager_uri = None
+
+                if voyager_uri:
+                    endpoint = voyager_uri.endpoint.name
+                    resource = voyager_uri.resource
+                    resource_model = getattr(resource, '__name__', None)
+                    args = {}
+
+                    if not resource_model:
+                        resource_model = str(resource).split(',')[0]
+                    try:
+                        EndpointModel = pool.get(endpoint)
+                    except Exception:
+                        EndpointModel = None
+                    if EndpointModel:
+                        for field_name, field in EndpointModel._fields.items():
+                            if (isinstance(field, fields.Many2One)
+                                    and field.model_name == resource_model):
+                                args[field_name] = resource.id
+                    if voyager_uri.language:
+                        language = voyager_uri.language.code
+                else:
+                    if request.method:
+                        endpoint, args = adapter.match(request.path,
+                            request.method)
+                    else:
+                        endpoint, args = adapter.match(request.path)
+            elif self.route_method == 'endpoint':
+                if request.method:
+                    endpoint, args = adapter.match(request.path,
+                        request.method)
+                else:
+                    endpoint, args = adapter.match(request.path)
+        except HTTPException as e:
+            if e.code in error_handlers:
+                endpoint = error_handlers[e.code]
+                return (None, None, None, None, None,
+                    adapter.build(endpoint.__name__, None))
+            raise e
+        return endpoint, args, adapter, endpoint_args, language, None
 
     @classmethod
     def delete(cls, sites):
@@ -1164,3 +1335,15 @@ class VoyagerSite(metaclass=PoolMeta):
 
 class ComponentCMS(Component):
     __fields__ = []
+
+    @staticmethod
+    def _render_child_component(name, schema=None):
+        pool = Pool()
+
+        try:
+            ComponentModel = pool.get(name)
+            if schema:
+                return ComponentModel(schema=schema).tag()
+            return ComponentModel().tag()
+        except Exception:
+            return None
