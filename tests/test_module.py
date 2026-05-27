@@ -135,6 +135,234 @@ class VoyagerCmsTestCase(ModuleTestCase):
              '/draft/es/hello-world'])
 
     @with_transaction()
+    def test_page_uris_field_is_editable_in_draft(self):
+        Page = Pool().get('www.page')
+
+        field = Page.uris.field
+        self.assertFalse(field.readonly)
+        self.assertIn('readonly', field.states)
+
+    @with_transaction()
+    def test_page_set_uris_forwards_writes_to_www_uri(self):
+        Page = Pool().get('www.page')
+
+        page = SimpleNamespace(id=5, site=SimpleNamespace(id=3))
+        uri_record = SimpleNamespace(id=1)
+
+        pool_mock = SimpleNamespace()
+        uri_model = SimpleNamespace()
+        uri_model.search = lambda *args, **kwargs: [uri_record]
+        uri_model.write = lambda *args, **kwargs: None
+        uri_model.delete = lambda *args, **kwargs: None
+        uri_model.create = lambda *args, **kwargs: None
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            pool_mock.get = lambda name: uri_model
+            with patch.object(uri_model, 'write') as write_mock:
+                Page.set_uris(
+                    [page],
+                    'uris',
+                    [('write', [1], {'uri': '/draft/en/test'})],
+                )
+
+        write_mock.assert_called_once()
+        args, kwargs = write_mock.call_args
+        self.assertEqual([r.id for r in args[0]], [1])
+        self.assertEqual(args[1], {'uri': '/draft/en/test'})
+
+    @with_transaction()
+    def test_page_set_uris_supports_numeric_o2m_commands(self):
+        Page = Pool().get('www.page')
+
+        page = SimpleNamespace(id=5, site=SimpleNamespace(id=3))
+        uri_record = SimpleNamespace(id=1)
+
+        pool_mock = SimpleNamespace()
+        uri_model = SimpleNamespace()
+        uri_model.search = lambda *args, **kwargs: [uri_record]
+        uri_model.write = lambda *args, **kwargs: None
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            pool_mock.get = lambda name: uri_model
+            with patch.object(uri_model, 'write') as write_mock:
+                Page.set_uris(
+                    [page],
+                    'uris',
+                    [(1, 1, {'uri': '/draft/en/test'})],
+                )
+
+        write_mock.assert_called_once()
+        args, kwargs = write_mock.call_args
+        self.assertEqual([r.id for r in args[0]], [1])
+        self.assertEqual(args[1], {'uri': '/draft/en/test'})
+
+    @with_transaction()
+    def test_page_generate_uri_uses_selected_main_uri_language(self):
+        Page = Pool().get('www.page')
+
+        class LangRecord:
+            def __init__(self, id, code):
+                self.id = id
+                self.code = code
+
+        class LangModel:
+            def __call__(self, id):
+                return {1: es, 2: en}[id]
+
+            def search(self, domain):
+                # Called by Page.on_change_with_available_languages; return both.
+                return [es, en]
+
+        class UriRecord:
+            def __init__(self, id, uri, language):
+                self.id = id
+                self.uri = uri
+                self.language = language
+                self.main_uri = None
+
+        class UriModel:
+            def __init__(self):
+                self._records = []
+                self._next_id = 1
+
+            def search(self, domain, order=None, limit=None):
+                # Only searches on resource/site, return everything in memory.
+                return list(self._records)
+
+            def create(self, values_list):
+                created = []
+                for values in values_list:
+                    language = {1: es, 2: en}[values['language']]
+                    rec = UriRecord(
+                        self._next_id, values['uri'], language)
+                    self._next_id += 1
+                    self._records.append(rec)
+                    created.append(rec)
+                return created
+
+            def write(self, uris, values):
+                for uri in uris:
+                    for k, v in values.items():
+                        if k == 'language':
+                            uri.language = {1: es, 2: en}[v]
+                        elif k == 'main_uri':
+                            uri.main_uri = v
+                        else:
+                            setattr(uri, k, v)
+
+            def delete(self, uris):
+                for uri in uris:
+                    if uri in self._records:
+                        self._records.remove(uri)
+
+        class ModelModel:
+            def search(self, domain, limit=None):
+                return [SimpleNamespace(id=99)]
+
+        es = LangRecord(1, 'es')
+        en = LangRecord(2, 'en')
+        uri_model = UriModel()
+
+        site = SimpleNamespace(id=3, langs=[es, en])
+        page = SimpleNamespace(
+            __name__='www.page',
+            id=5,
+            name='Hello World',
+            site=site,
+            state='draft',
+            main_uri_language=en,
+            rec_name='Hello World',
+        )
+
+        pool_mock = SimpleNamespace()
+
+        def get_model(name):
+            if name == 'www.uri':
+                return uri_model
+            if name == 'ir.model':
+                return ModelModel()
+            if name == 'ir.lang':
+                return LangModel()
+            raise AssertionError(name)
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            pool_mock.get = get_model
+            Page.generate_uri([page])
+
+        # Ensure the URI for the selected language ('en') becomes the main URI.
+        by_code = {u.language.code: u for u in uri_model._records}
+        self.assertIsNone(by_code['en'].main_uri)
+        self.assertEqual(by_code['es'].main_uri, by_code['en'].id)
+
+    @with_transaction()
+    def test_generate_uri_preserves_manually_edited_uri(self):
+        Page = Pool().get('www.page')
+
+        page = SimpleNamespace(
+            __name__='www.page',
+            id=5,
+            site=SimpleNamespace(id=3),
+            state='draft',
+            name='Hello World',
+            rec_name='Hello World',
+        )
+
+        existing_uri = SimpleNamespace(
+            id=10,
+            uri='/draft/en/test',
+            language=SimpleNamespace(code='en'),
+            site=page.site,
+            main_uri=None,
+        )
+
+        written = []
+
+        def uri_search(domain, limit=None, order=None):
+            # existing record query
+            if ('resource', '=', 'www.page,5') in domain:
+                return [existing_uri]
+            # duplicate search query
+            return []
+
+        uri_model = SimpleNamespace(
+            search=uri_search,
+            delete=lambda records: None,
+            create=lambda values: [],
+            write=lambda records, values: written.append((records, values)),
+        )
+
+        endpoint_model = SimpleNamespace(name='www.content.wrapper')
+        endpoint_model.id = 99
+        model_model = SimpleNamespace(search=lambda *a, **k: [endpoint_model])
+
+        class DummyLang:
+            def __init__(self, _id):
+                self.id = _id
+                self.code = 'en'
+
+        pool_mock = SimpleNamespace(
+            get=lambda name: {
+                'www.uri': uri_model,
+                'ir.model': model_model,
+                'ir.lang': DummyLang,
+            }[name]
+        )
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock, \
+                patch.object(Page, '_default_uris',
+                    return_value=[{'language': 1, 'uri': '/draft/en/hello-world'}]):
+            PoolMock.return_value = pool_mock
+            Page.generate_uri([page])
+
+        self.assertTrue(written)
+        # First write should keep the manually edited URI and set endpoint.
+        self.assertEqual(written[0][1]['uri'], '/draft/en/test')
+        self.assertIn('endpoint', written[0][1])
+
+    @with_transaction()
     def test_fill_uris_only_updates_missing_values(self):
         Page = Pool().get('www.page')
 
@@ -210,17 +438,13 @@ class VoyagerCmsTestCase(ModuleTestCase):
     @with_transaction()
     def test_write_state_resyncs_and_regenerates_uris(self):
         Page = Pool().get('www.page')
-        page = SimpleNamespace(id=5, uris=[])
+        page = SimpleNamespace(id=5)
 
-        with patch.object(Page, '_sync_page_uris') as sync_uris, \
-                patch.object(Page, '_create_default_uris') as create_uris, \
-                patch.object(Page, 'generate_uri') as generate_uri, \
+        with patch.object(Page, 'generate_uri') as generate_uri, \
                 patch('trytond.modules.voyager_cms.utils.super') as super_mock:
             super_mock.return_value.write.return_value = None
             Page.write([page], {'state': 'published'})
 
-        create_uris.assert_called_once_with([page])
-        sync_uris.assert_called_once_with([page], force=True)
         generate_uri.assert_called_once_with([page])
 
     @with_transaction()
@@ -235,7 +459,6 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_delete_relations_use_expected_ondelete_rules(self):
         pool = Pool()
         Page = pool.get('www.page')
-        PageURI = pool.get('www.page.uri')
         Element = pool.get('www.element')
         Schema = pool.get('www.schema')
         Menu = pool.get('www.menu')
@@ -244,7 +467,6 @@ class VoyagerCmsTestCase(ModuleTestCase):
         SiteLang = pool.get('www.site.lang')
 
         self.assertEqual(Page._fields['site'].ondelete, 'CASCADE')
-        self.assertEqual(PageURI._fields['page'].ondelete, 'CASCADE')
         self.assertEqual(Element._fields['page'].ondelete, 'CASCADE')
         self.assertEqual(Schema._fields['component'].ondelete, 'CASCADE')
         self.assertEqual(URI._fields['site'].ondelete, 'CASCADE')

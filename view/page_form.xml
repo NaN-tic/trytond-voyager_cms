@@ -21,6 +21,8 @@
             <field name="origin_page"/>
             <label name="published_page" />
             <field name="published_page"/>
+            <label name="main_uri_language"/>
+            <field name="main_uri_language"/>
             <field name="uris" colspan="4" mode="tree,form" height="250"/>
             <group id="buttons" col="1" colspan="4">
                 <button name="generate_uri"/>

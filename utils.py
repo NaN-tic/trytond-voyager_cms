@@ -163,11 +163,18 @@ def _get_voyager_context(site=None, preview=False):
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
-    name = fields.Char('Name', required=True,
+    name = fields.Char('Name', required=True, translate=True,
         states=PAGE_STATES, depends=PAGE_DEPENDS)
     site = fields.Many2One('www.site', 'Site', required=True,
         ondelete='CASCADE',
         states=PAGE_STATES, depends=PAGE_DEPENDS)
+    available_languages = fields.Function(
+        fields.Many2Many('ir.lang', None, None, 'Available Languages'),
+        'on_change_with_available_languages')
+    main_uri_language = fields.Many2One(
+        'ir.lang', 'Idioma',
+        domain=[('id', 'in', Eval('available_languages'))],
+        states=PAGE_STATES, depends=PAGE_DEPENDS + ['site', 'available_languages'])
     # links a published page back to its draft
     origin_page = fields.Many2One(
         'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
@@ -180,8 +187,9 @@ class Page(Workflow, ModelSQL, ModelView):
             ('published', 'Published'),
             ], 'State', readonly=True, required=True, sort=False)
     uris = fields.Function(
-        fields.One2Many('www.uri', None, 'URIs', readonly=True),
-        'get_uris')
+        fields.One2Many('www.uri', None, 'URIs',
+            states=PAGE_STATES, depends=PAGE_DEPENDS),
+        'get_uris', setter='set_uris')
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
@@ -217,6 +225,23 @@ class Page(Workflow, ModelSQL, ModelView):
     def default_state():
         return 'draft'
 
+    @fields.depends('site')
+    def on_change_with_available_languages(self, name=None):
+        pool = Pool()
+        Lang = pool.get('ir.lang')
+        codes = self._site_lang_codes(self.site)
+        return [l.id for l in Lang.search([('code', 'in', codes)])]
+
+    @fields.depends('site', 'main_uri_language', 'available_languages')
+    def on_change_site(self):
+        if self.main_uri_language and self.main_uri_language.id in (
+                self.available_languages or []):
+            return
+        if self.available_languages:
+            self.main_uri_language = self.available_languages[0]
+        else:
+            self.main_uri_language = None
+
     @classmethod
     def get_uris(cls, pages, name):
         pool = Pool()
@@ -234,6 +259,79 @@ class Page(Workflow, ModelSQL, ModelView):
                         ], order=[('id', 'ASC')])
             ]
         return result
+
+    @classmethod
+    def set_uris(cls, pages, name, value):
+        """
+        Compatibility setter.
+
+        `uris` is computed from `www.uri` (resource = "www.page,<id>").
+        Some clients (including the Tryton client when editing embedded lines)
+        still send One2Many commands for this field when saving a page. In that
+        case we must forward the changes to `www.uri` instead of ignoring them,
+        otherwise the UI appears to "revert" the changes after save.
+        """
+        if not value:
+            return
+
+        pool = Pool()
+        URI = pool.get('www.uri')
+
+        for page in pages:
+            page_id = getattr(page, 'id', None)
+            if not page_id:
+                continue
+            resource_ref = f'{cls.__name__},{page_id}'
+
+            for command in value:
+                if not command:
+                    continue
+                action = command[0]
+
+                # Tryton One2Many commands may be expressed either as:
+                # ('write', [ids], vals) / ('create', [vals]) / ('delete', [ids])
+                # or the numeric form: (1, id, vals) / (0, 0, vals) / (2, id)
+                if action == 'write' or action == 1:
+                    if action == 1:
+                        ids, vals = [command[1]], command[2]
+                    else:
+                        ids, vals = command[1], command[2]
+                    if not ids or not vals:
+                        continue
+                    uris = URI.search([
+                            ('id', 'in', ids),
+                            ('resource', '=', resource_ref),
+                            ])
+                    if uris:
+                        URI.write(uris, vals)
+                elif action == 'delete' or action == 2:
+                    ids = [command[1]] if action == 2 else command[1]
+                    if not ids:
+                        continue
+                    uris = URI.search([
+                            ('id', 'in', ids),
+                            ('resource', '=', resource_ref),
+                            ])
+                    if uris:
+                        URI.delete(uris)
+                elif action == 'create' or action == 0:
+                    records = [command[2]] if action == 0 else (command[1] or [])
+                    if not records:
+                        continue
+                    to_create = []
+                    for vals in records:
+                        vals = dict(vals or {})
+                        vals.setdefault('resource', resource_ref)
+                        if 'site' not in vals:
+                            site = getattr(page, 'site', None)
+                            if getattr(site, 'id', None):
+                                vals['site'] = site.id
+                        to_create.append(vals)
+                    if to_create:
+                        URI.create(to_create)
+                else:
+                    # Ignore other One2Many operations; `uris` is computed.
+                    continue
 
     @classmethod
     def _delete_generated_uris(cls, pages):
@@ -427,16 +525,6 @@ class Page(Workflow, ModelSQL, ModelView):
                       page=page.rec_name)
                 )
             resource_ref = f'{page.__name__},{page.id}'
-            desired_rows = cls._default_uris(
-                page.name, page.site, state=page.state or 'draft')
-            desired_uris = [
-                (row.get('uri'), row.get('language'))
-                for row in desired_rows
-                if row.get('uri') and row.get('language')
-            ]
-            if not desired_uris:
-                continue
-
             existing_uris = {}
             existing_uris_by_language = {}
             for uri in URI.search([
@@ -447,11 +535,41 @@ class Page(Workflow, ModelSQL, ModelView):
                 existing_uris[(uri.uri, code)] = uri
                 if code:
                     existing_uris_by_language[code] = uri
+            selected_code = (
+                page.main_uri_language.code
+                if getattr(page, 'main_uri_language', None)
+                and getattr(page.main_uri_language, 'code', None)
+                else None
+            )
+
+            # Build desired rows, but preserve any manually edited URI value
+            # for a given language when the record already exists. The purpose
+            # of this button is to (re)sync records, not to override manual
+            # slugs.
+            desired_rows = cls._default_uris(
+                page.name, page.site, state=page.state or 'draft')
+            desired_uris = []
+            Lang = pool.get('ir.lang')
+            for row in desired_rows:
+                uri_value = row.get('uri')
+                language_id = row.get('language')
+                if not language_id:
+                    continue
+                language = Lang(language_id)
+                code = language.code if language else None
+                existing = existing_uris_by_language.get(code) if code else None
+                if existing and getattr(existing, 'uri', None):
+                    uri_value = existing.uri
+                # Ensure any existing URI missing endpoint gets fixed by the
+                # regeneration.
+                if uri_value:
+                    desired_uris.append((uri_value, language_id))
+            if not desired_uris:
+                continue
 
             new_uris = []
-            main_uri = None
+            selected_uri = None
 
-            Lang = pool.get('ir.lang')
             for uri_value, language_id in desired_uris:
                 language = Lang(language_id)
                 code = language.code if language else None
@@ -470,23 +588,43 @@ class Page(Workflow, ModelSQL, ModelView):
                         (uri.uri, uri.language.code if uri.language else None),
                         None)
                 else:
-                    uri = URI()
-                    uri.resource = resource_ref
+                    uri = None
 
-                uri.site = page.site
-                uri.uri = uri_value
-                uri.language = language
-                uri.endpoint = endpoint
+                if uri is None:
+                    uri = URI.create([{
+                                'resource': resource_ref,
+                                'site': page.site.id,
+                                'uri': uri_value,
+                                'language': language.id,
+                                'endpoint': endpoint.id,
+                                }])[0]
+                else:
+                    URI.write([uri], {
+                            'site': page.site.id,
+                            'uri': uri_value,
+                            'language': language.id,
+                            'endpoint': endpoint.id,
+                            })
 
                 new_uris.append(uri)
-                if main_uri is None:
-                    main_uri = uri
+                if selected_code and code == selected_code:
+                    selected_uri = uri
 
-            for uri in new_uris:
-                if uri is main_uri:
-                    uri.main_uri = None
-                else:
-                    uri.main_uri = main_uri
+            main_uri = selected_uri or (new_uris[0] if new_uris else None)
+            if not main_uri:
+                continue
+
+            if (not getattr(page, 'main_uri_language', None)
+                    or page.main_uri_language.id != main_uri.language.id):
+                cls.write([page], {'main_uri_language': main_uri.language.id})
+
+            # Ensure the chosen main URI satisfies the domain
+            # (main_uri must be NULL). Clear first to avoid transient states
+            # where another record points to the would-be main.
+            URI.write(new_uris, {'main_uri': None})
+            others = [uri for uri in new_uris if uri is not main_uri]
+            if others:
+                URI.write(others, {'main_uri': main_uri.id})
 
             conflicting_uris = []
             new_uri_ids = {uri.id for uri in new_uris if getattr(uri, 'id', None)}
@@ -502,8 +640,7 @@ class Page(Workflow, ModelSQL, ModelView):
             if conflicting_uris:
                 URI.delete(conflicting_uris)
 
-            if new_uris:
-                URI.save(new_uris)
+            # Records already created/written above.
             if existing_uris:
                 URI.delete(list(existing_uris.values()))
 
@@ -979,13 +1116,20 @@ class Schema(ModelSQL, ModelView):
 
     @classmethod
     def __register__(cls, module_name):
+        table = cls.__table_handler__(module_name)
+        if table.column_exist('element') and not table.column_exist('component'):
+            table.column_rename('element', 'component')
+
         super().__register__(module_name)
-        cursor = Transaction().connection.cursor()
-        cursor.execute("""
-            UPDATE www_schema
-            SET element = component
-            WHERE element IS NULL AND component IS NOT NULL
-        """)
+
+        table = cls.__table_handler__(module_name)
+        if table.column_exist('element') and table.column_exist('component'):
+            cursor = Transaction().connection.cursor()
+            cursor.execute("""
+                UPDATE www_schema
+                SET component = element
+                WHERE component IS NULL AND element IS NOT NULL
+            """)
 
     @classmethod
     def _schema_content_fields(cls):

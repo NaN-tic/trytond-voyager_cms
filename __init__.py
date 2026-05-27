@@ -7,7 +7,6 @@ from . import utils
 def register():
     Pool.register(
         utils.Page,
-        utils.PageURI,
         utils.Element,
         utils.Schema,
         utils.ContentWrapper,
