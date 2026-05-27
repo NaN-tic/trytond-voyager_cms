@@ -1,4 +1,4 @@
 <tree>
-    <field name="component"/>
+    <field name="element"/>
     <field name="model_name"/>
 </tree>

@@ -8,8 +8,12 @@
             <field name="name"/>
             <label name="sequence"/>
             <field name="sequence"/>
+            <field name="valid_models" invisible="1" colspan="4"/>
             <label name="model"/>
             <field name="model"/>
+            <newline/>
+            <label name="show_preview_fields"/>
+            <field name="show_preview_fields"/>
             <newline/>
             <field name="schema" mode="form,tree" colspan="4"/>
         </page>

@@ -1,6 +1,6 @@
 <form>
-    <label name="component"/>
-    <field name="component"/>
+    <label name="element"/>
+    <field name="element"/>
     <label name="model_name"/>
     <field name="model_name"/>
 </form>

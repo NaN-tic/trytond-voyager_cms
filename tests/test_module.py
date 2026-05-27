@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from dominate.tags import div
+from trytond.model import fields
+from trytond.modules.voyager_cms import utils as voyager_utils
 from trytond.pool import Pool
 from trytond.tests.test_tryton import ModuleTestCase, with_transaction
 from trytond.transaction import Transaction
@@ -62,7 +64,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn('schema', kwargs)
         schema = kwargs['schema']
         if 'menu' in schema._fields:
-            self.assertEqual(schema.menu.name, 'Preview Menu')
+            self.assertIsNone(schema.menu)
         if 'icon' in schema._fields:
             self.assertEqual(schema.icon, 'Preview')
         if 'image_url' in kwargs['schema']._fields:
@@ -97,6 +99,50 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertNotEqual(kwargs['schema'].title, '')
 
     @with_transaction()
+    def test_element_kwargs_keep_preview_schema_when_disabled(self):
+        Element = Pool().get('www.element')
+
+        class DummyModel:
+            _fields = {
+                'schema': object(),
+            }
+
+        with Transaction().set_context(voyager_cms_preview=True):
+            kwargs = Element.get_element_kwargs(
+                DummyModel, show_preview_fields=False)
+
+        self.assertIn('schema', kwargs)
+
+    @with_transaction()
+    def test_element_kwargs_keep_preview_with_schema_when_disabled(self):
+        Element = Pool().get('www.element')
+        Schema = Pool().get('www.schema')
+
+        class DummyModel:
+            _fields = {
+                'schema': object(),
+            }
+
+        schema = Schema()
+        schema.title = ''
+
+        with Transaction().set_context(voyager_cms_preview=True):
+            kwargs = Element.get_element_kwargs(
+                DummyModel, schema, show_preview_fields=False)
+
+        self.assertIn('schema', kwargs)
+
+    @with_transaction()
+    def test_render_element_content_still_renders_when_preview_disabled(self):
+        Element = Pool().get('www.element')
+
+        with Transaction().set_context(voyager_cms_preview=True):
+            content = Element.render_element_content(
+                'test.component', show_preview_fields=False)
+
+        self.assertTrue(getattr(content, 'children', []))
+
+    @with_transaction()
     def test_component_kwargs_skip_preview_schema_for_models_without_schema(self):
         Component = Pool().get('www.component')
 
@@ -115,6 +161,117 @@ class VoyagerCmsTestCase(ModuleTestCase):
         preview_image = Component._preview_image()
 
         self.assertTrue(preview_image.startswith('data:image/svg+xml,'))
+
+    @with_transaction()
+    def test_preview_one2many_fields_are_empty_lists(self):
+        Element = Pool().get('www.element')
+
+        preview_value = Element._preview_value_for_field(
+            'children', fields.One2Many('test.child', 'parent', 'Children'))
+
+        self.assertEqual(preview_value, [])
+
+    @with_transaction()
+    def test_preview_many2one_fields_are_none(self):
+        Element = Pool().get('www.element')
+
+        preview_value = Element._preview_value_for_field(
+            'menu', fields.Many2One('www.menu', 'Menu'))
+
+        self.assertIsNone(preview_value)
+
+    @with_transaction()
+    def test_preview_one2many_fields_do_not_merge_real_values(self):
+        Element = Pool().get('www.element')
+        preview_schema = SimpleNamespace(
+            _fields={
+                'children': fields.One2Many(
+                    'test.child', 'parent', 'Children'),
+            },
+            children=[],
+        )
+        schema = SimpleNamespace(children=['real'])
+
+        with patch.object(
+                Element, '_build_preview_schema',
+                return_value=preview_schema):
+            merged = Element._build_preview_schema_with_values(schema)
+
+        self.assertEqual(merged.children, [])
+
+    @with_transaction()
+    def test_build_preview_schema_sets_many2one_fields_to_none(self):
+        Element = Pool().get('www.element')
+
+        class FakeSchema:
+            _fields = {
+                'menu': fields.Many2One('www.menu', 'Menu'),
+            }
+
+            def __init__(self):
+                self.menu = 'unexpected'
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value.get.return_value = FakeSchema
+            preview_schema = Element._build_preview_schema()
+
+        self.assertIsNone(preview_schema.menu)
+
+    @with_transaction()
+    def test_element_show_preview_fields_defaults_to_true(self):
+        Element = Pool().get('www.element')
+
+        self.assertTrue(Element.default_show_preview_fields())
+
+    @with_transaction()
+    def test_element_model_ids_include_only_componentcms_models(self):
+        Element = Pool().get('www.element')
+
+        class PlainModel:
+            pass
+
+        class DummyComponent(voyager_utils.ComponentCMS):
+            __name__ = 'test.component'
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            pool = PoolMock.return_value
+            Model = SimpleNamespace(search=lambda domain: [
+                SimpleNamespace(id=7),
+            ])
+            pool.get.return_value = Model
+            pool.iterobject.return_value = iter([
+                ('test.component', DummyComponent),
+                ('test.plain', PlainModel),
+            ])
+
+            model_ids = Element._element_model_ids()
+
+        self.assertEqual(model_ids, [7])
+
+    @with_transaction()
+    def test_element_get_valid_models_returns_same_ids_for_each_record(self):
+        Element = Pool().get('www.element')
+        first = SimpleNamespace(id=1)
+        second = SimpleNamespace(id=2)
+
+        with patch.object(Element, '_element_model_ids',
+                return_value=[7, 9]):
+            result = Element.get_valid_models([first, second], 'valid_models')
+
+        self.assertEqual(result, {
+            1: [7, 9],
+            2: [7, 9],
+        })
+
+    @with_transaction()
+    def test_element_default_valid_models_uses_componentcms_model_ids(self):
+        Element = Pool().get('www.element')
+
+        with patch.object(Element, '_element_model_ids',
+                return_value=[7, 9]):
+            model_ids = Element.default_valid_models()
+
+        self.assertEqual(model_ids, [7, 9])
 
     @with_transaction()
     def test_page_on_change_name_creates_default_uris(self):
@@ -468,11 +625,11 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         self.assertEqual(Page._fields['site'].ondelete, 'CASCADE')
         self.assertEqual(Element._fields['page'].ondelete, 'CASCADE')
-        self.assertEqual(Schema._fields['component'].ondelete, 'CASCADE')
+        self.assertEqual(Schema._fields['element'].ondelete, 'CASCADE')
         self.assertEqual(URI._fields['site'].ondelete, 'CASCADE')
         self.assertEqual(Menu._fields['site'].ondelete, 'CASCADE')
         self.assertEqual(Menu._fields['uri'].ondelete, 'SET NULL')
-        self.assertEqual(Menu._fields['component'].ondelete, 'SET NULL')
+        self.assertEqual(Menu._fields['element'].ondelete, 'SET NULL')
         self.assertEqual(Site._fields['header'].ondelete, 'SET NULL')
         self.assertEqual(Site._fields['footer'].ondelete, 'SET NULL')
         self.assertEqual(Site._fields['layout'].ondelete, 'SET NULL')
@@ -484,7 +641,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         class DummyElement:
             @classmethod
-            def get_element_kwargs(cls, model, schema=None):
+            def get_element_kwargs(
+                    cls, model, schema=None, show_preview_fields=True):
                 return {}
 
         class DummyHeader:
@@ -538,7 +696,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         class DummyElement:
             @classmethod
-            def get_element_kwargs(cls, model, schema=None):
+            def get_element_kwargs(
+                    cls, model, schema=None, show_preview_fields=True):
                 return {}
 
         class DummyComponent:
@@ -599,5 +758,19 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn('Preview Body', html)
         self.assertNotIn('Header Chrome', html)
         self.assertNotIn('Footer Chrome', html)
+
+    @with_transaction()
+    def test_element_get_preview_returns_empty_when_page_is_missing(self):
+        Element = Pool().get('www.element')
+
+        element = Element()
+        element.page = None
+        element.model = SimpleNamespace(name='test.component')
+        element.schema = None
+        element.show_preview_fields = True
+
+        preview = element.get_preview()
+
+        self.assertEqual(preview, b'')
 
 del ModuleTestCase

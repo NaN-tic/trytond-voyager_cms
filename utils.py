@@ -17,7 +17,6 @@ from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
 from trytond.url import http_host
 
-LANGS = ['es', 'en', 'ca']
 PAGE_STATES = {'readonly': Eval('state') != 'draft'}
 PAGE_DEPENDS = ['state']
 CHILD_PAGE_STATES = {
@@ -25,34 +24,46 @@ CHILD_PAGE_STATES = {
     & (Eval('_parent_page', {}).get('state') != 'draft')
 }
 CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
-CHILD_PAGES_STATES = {'readonly': Eval('page_state') != 'draft'}
-CHILD_PAGES_DEPENDS = ['page_state']
-CHILD_PAGES_DEFENDS = CHILD_PAGES_DEPENDS
 
 
-def _safe_related(record, name):
-    try:
-        return getattr(record, name, None)
-    except Exception:
-        return None
+class _LayoutRenderProxy:
+    __slots__ = ('_layout', 'content', 'title')
+
+    def __init__(self, layout, content, title):
+        self._layout = layout
+        self.content = content
+        self.title = title
+
+    def __getattr__(self, name):
+        return getattr(self._layout, name)
 
 
 def _render_layout_instance(layout, content, title):
     if layout is None:
         return content.render() if hasattr(content, 'render') else str(content or '')
 
-    layout.content = content
-    layout.title = title
-    if hasattr(layout, 'main'):
+    try:
+        return layout.render(content=content, title=title)
+    except TypeError as exc:
+        if "unexpected keyword argument 'content'" not in str(exc):
+            raise
+    try:
+        return layout.render(content, title=title)
+    except TypeError as exc:
+        if "unexpected keyword argument 'title'" not in str(exc):
+            raise
+
+    proxy = _LayoutRenderProxy(layout, content, title)
+    if hasattr(proxy, 'main'):
         try:
-            layout.main.children = []
+            proxy.main.children = []
         except Exception:
             pass
         try:
-            layout.main.add(content)
+            proxy.main.add(content)
         except Exception:
             pass
-    return layout.render()
+    return type(layout).render(proxy)
 
 
 class _PreviewAdapter:
@@ -118,47 +129,20 @@ def _build_preview_voyager_context(site):
 
 
 def _get_voyager_context(site=None, preview=False):
-    current = Transaction().context.get('voyager_context')
-    default = (
-        _build_preview_voyager_context(site)
-        if preview else VoyagerContext(site=site)
-    )
+    context = getattr(Transaction(), 'context', {}) or {}
+    current = context.get('voyager_context')
     if not current:
-        return default
-    return VoyagerContext(
-        site=site or getattr(current, 'site', None),
-        session=(
-            getattr(current, 'session', None)
-            if getattr(current, 'session', None) is not None
-            else getattr(default, 'session', None)
-        ),
-        cache=(
-            getattr(current, 'cache', None)
-            if getattr(current, 'cache', None) is not None
-            else getattr(default, 'cache', None)
-        ),
-        request=(
-            getattr(current, 'request', None)
-            if getattr(current, 'request', None) is not None
-            else getattr(default, 'request', None)
-        ),
-        adapter=(
-            getattr(current, 'adapter', None)
-            if getattr(current, 'adapter', None) is not None
-            else getattr(default, 'adapter', None)
-        ),
-        endpoint_args=(
-            getattr(current, 'endpoint_args', None)
-            if getattr(current, 'endpoint_args', None) is not None
-            else getattr(default, 'endpoint_args', None)
-        ),
-        web_prefix=(
-            getattr(current, 'web_prefix', None)
-            if getattr(current, 'web_prefix', None) is not None
-            else getattr(default, 'web_prefix', None)
-        ),
-    )
+        return VoyagerContext(site=site)
+    values = {
+        key: value for key, value in vars(current).items()
+        if key != 'site'
+    }
+    values['site'] = site or getattr(current, 'site', None)
+    return VoyagerContext(**values)
 
+
+def _build_preview_context(site=None):
+    return _build_preview_voyager_context(site)
 
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
@@ -421,8 +405,7 @@ class Page(Workflow, ModelSQL, ModelView):
 
     @classmethod
     def _site_lang_codes(cls, site):
-        if not site:
-            return LANGS[:]
+        pool = Pool()
         langs = []
         if getattr(site, 'langs', None):
             langs = [
@@ -431,7 +414,6 @@ class Page(Workflow, ModelSQL, ModelView):
             ]
         elif hasattr(site, 'id') and site.id:
             try:
-                pool = Pool()
                 SiteLang = pool.get('www.site.lang')
                 site_langs = SiteLang.search([('site', '=', site.id)])
                 langs = [
@@ -441,7 +423,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 ]
             except Exception:
                 pass
-        return langs or LANGS[:]
+        return langs
 
     @classmethod
     def _default_uris(cls, name, site=None, state='published'):
@@ -700,7 +682,7 @@ class Page(Workflow, ModelSQL, ModelView):
         Wrapper = pool.get('www.content.wrapper')
         site = page.site if page and page.site else None
         with Transaction().set_context(
-                voyager_context=_build_preview_voyager_context(site),
+                voyager_context=_build_preview_context(site),
                 voyager_cms_preview=True):
             rendered = Wrapper(page=page).render()
         if hasattr(rendered, 'render'):
@@ -711,7 +693,7 @@ class Page(Workflow, ModelSQL, ModelView):
             return cls._preview_message('No preview available.')
         return Element._ensure_preview_document(content, site=site)
 
-    @fields.depends('site', 'element', 'name')
+    @fields.depends('site', 'name', 'element')
     def get_preview(self, name=None):
         if not self.site:
             return self._preview_message(
@@ -737,14 +719,23 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
 
     name = fields.Char('Name', required=True,
         states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    valid_models = fields.Function(
+        fields.Many2Many('ir.model', None, None, 'Valid Models'),
+        'get_valid_models')
     model = fields.Many2One('ir.model', 'Model', required=True,
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+        domain=[
+            ('id', 'in', Eval('valid_models', [])),
+        ],
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS + ['valid_models'])
     page = fields.Many2One('www.page', 'Page', ondelete='CASCADE',
         states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     page_state = fields.Function(fields.Char('Page State'),
         'on_change_with_page_state')
-    schema = fields.One2Many('www.schema', 'component', "Schema",
-        size=1, add_remove=[('component', '=', None)],
+    schema = fields.One2Many('www.schema', 'element', "Schema",
+        size=1, add_remove=[('element', '=', None)],
+        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+    show_preview_fields = fields.Boolean(
+        'Show Preview Fields',
         states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
     preview = fields.Function(
         fields.Binary('HTML Preview', filename='preview_filename'),
@@ -753,34 +744,50 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         fields.Char('Preview Filename', readonly=True),
         'get_preview_filename')
 
-    @classmethod
-    def __register__(cls, module_name):
-        super().__register__(module_name)
-        cls._migrate_legacy_component_rows()
+    @staticmethod
+    def default_show_preview_fields():
+        return True
 
     @classmethod
-    def _migrate_legacy_component_rows(cls):
-        # keeps old component rows available from the new www.element table
-        cursor = Transaction().connection.cursor()
-        cursor.execute("""
-            INSERT INTO www_element (
-                id, create_date, create_uid, model, name, page,
-                sequence, write_date, write_uid           )
-            SELECT
-                c.id, c.create_date, c.create_uid, c.model, c.name, c.page,
-                c.sequence, c.write_date, c.write_uid
-            FROM www_component c
-            LEFT JOIN www_element e ON e.id = c.id
-            WHERE e.id IS NULL
-        """)
-        cursor.execute("""
-            SELECT setval(
-                pg_get_serial_sequence('www_element', 'id'),
-                GREATEST(COALESCE((SELECT MAX(id) FROM www_element), 1), 1),
-                true
-            )
-        """)
- 
+    def view_attributes(cls):
+        return super().view_attributes() + [
+            ('/form/notebook/page[@id="properties"]/label[@name="show_preview_fields"]', 'states', {
+                    'invisible': ~Bool(Eval('page')),
+                    }),
+            ('/form/notebook/page[@id="properties"]/field[@name="show_preview_fields"]', 'states', {
+                    'invisible': ~Bool(Eval('page')),
+                    }),
+            ('/form/notebook/page[@id="preview"]', 'states', {
+                    'invisible': ~Bool(Eval('show_preview_fields', True)),
+                    }),
+            ]
+
+    @staticmethod
+    def default_valid_models():
+        return Element._element_model_ids()
+
+    @staticmethod
+    def _element_model_ids():
+        pool = Pool()
+        Model = pool.get('ir.model')
+        model_names = sorted({
+            name for name, klass in pool.iterobject()
+            if issubclass(klass, ComponentCMS)
+        })
+        if not model_names:
+            return []
+        return [model.id for model in Model.search([
+                    ('name', 'in', model_names),
+                    ])]
+
+    @classmethod
+    def get_valid_models(cls, elements, name):
+        model_ids = cls._element_model_ids()
+        return {
+            element.id: model_ids
+            for element in elements
+        }
+
     @fields.depends('page', '_parent_page.state')
     def on_change_with_page_state(self, name=None):
         if self.page:
@@ -852,14 +859,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         ] if t)
 
         if isinstance(field, fields.Many2One):
-            if field.model_name == 'www.menu':
-                Menu = Pool().get('www.menu')
-                menu = Menu()
-                menu.name = 'Preview Menu'
-                menu.menus = []
-                return menu
             return None
-
+        if isinstance(field, fields.One2Many):
+            return []
         if isinstance(field, fields.Selection):
             return cls._preview_selection_value(field_name, field)
         if isinstance(field, fields.Date):
@@ -886,11 +888,11 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         schema = Schema()
         for field_name, field in Schema._fields.items():
             if field_name in {
-                    'component', 'id', 'create_uid', 'create_date',
+                    'element', 'id', 'create_uid', 'create_date',
                     'write_uid', 'write_date', 'rec_name', 'model_name'}:
                 continue
             value = cls._preview_value_for_field(field_name, field)
-            if value is not None:
+            if value is not None or isinstance(field, fields.Many2One):
                 setattr(schema, field_name, value)
         return schema
 
@@ -901,6 +903,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
             return preview_schema
 
         for field_name in getattr(preview_schema, '_fields', {}):
+            field = preview_schema._fields[field_name]
+            if isinstance(field, fields.One2Many):
+                continue
             if field_name in {'id', 'create_uid', 'create_date',
                     'write_uid', 'write_date', 'rec_name', 'model_name'}:
                 continue
@@ -917,7 +922,14 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return preview_schema
 
     @classmethod
-    def get_element_schema(cls, model, schema=None):
+    def _preview_enabled(cls, element):
+        context = getattr(Transaction(), 'context', {}) or {}
+        if not context.get('voyager_cms_preview'):
+            return True
+        return bool(getattr(element, 'show_preview_fields', True))
+
+    @classmethod
+    def get_element_schema(cls, model, schema=None, show_preview_fields=True):
         provided_schema = schema is not None
         if isinstance(schema, (list, tuple)):
             schema = next(
@@ -934,8 +946,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return None
 
     @classmethod
-    def get_element_kwargs(cls, model, schema=None):
-        schema = cls.get_element_schema(model, schema)
+    def get_element_kwargs(cls, model, schema=None, show_preview_fields=True):
+        schema = cls.get_element_schema(
+            model, schema, show_preview_fields=show_preview_fields)
         if not schema:
             return {}
 
@@ -988,26 +1001,29 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if not site:
             return content
 
-        preview = bool(Transaction().context.get('voyager_cms_preview'))
+        context = getattr(Transaction(), 'context', {}) or {}
+        preview = bool(context.get('voyager_cms_preview'))
         pool = Pool()
-        layout_component = _safe_related(site, 'layout')
+        layout_element = site.layout
         layout = None
-        if layout_component and layout_component.model:
-            LayoutModel = pool.get(layout_component.model.name)
+        if layout_element and layout_element.model:
+            LayoutModel = pool.get(layout_element.model.name)
             layout = LayoutModel(
                 **cls.get_element_kwargs(
-                    LayoutModel, layout_component.schema))
+                    LayoutModel, layout_element.schema))
         with Transaction().set_context(
-                voyager_context=_get_voyager_context(site, preview=preview),
+                voyager_context=(
+                    _build_preview_context(site)
+                    if preview else _get_voyager_context(site, preview=False)),
                 voyager_cms_preview=preview):
             if preview and site and not preview_chrome:
                 with div() as wrapped:
-                    header_component = getattr(site, 'header', None)
-                    if header_component and header_component.model:
+                    header_element = site.header
+                    if header_element and header_element.model:
                         try:
-                            HeaderModel = pool.get(header_component.model.name)
+                            HeaderModel = pool.get(header_element.model.name)
                             HeaderModel(**Element.get_element_kwargs(
-                                HeaderModel, header_component.schema)).tag()
+                                HeaderModel, header_element.schema)).tag()
                         except Exception:
                             pass
 
@@ -1017,12 +1033,12 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                         else:
                             raw(str(content))
 
-                    footer_component = getattr(site, 'footer', None)
-                    if footer_component and footer_component.model:
+                    footer_element = site.footer
+                    if footer_element and footer_element.model:
                         try:
-                            FooterModel = pool.get(footer_component.model.name)
+                            FooterModel = pool.get(footer_element.model.name)
                             FooterModel(**Element.get_element_kwargs(
-                                FooterModel, footer_component.schema)).tag()
+                                FooterModel, footer_element.schema)).tag()
                         except Exception:
                             try:
                                 pool.get('www.footer')().tag()
@@ -1040,12 +1056,14 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return rendered
 
     @classmethod
-    def render_element_content(cls, model_name, schema=None):
+    def render_element_content(
+            cls, model_name, schema=None, show_preview_fields=True):
         pool = Pool()
         ElementModel = pool.get(model_name)
         with div() as content:
             tag = ElementModel(
-                **cls.get_element_kwargs(ElementModel, schema)
+                **cls.get_element_kwargs(
+                    ElementModel, schema)
             ).tag()
             if tag is not None and not getattr(content, 'children', None):
                 content.add(tag)
@@ -1055,10 +1073,11 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     def render_preview_content(cls, element):
         site = element.page.site if element.page and element.page.site else None
         with Transaction().set_context(
-                voyager_context=_get_voyager_context(site, preview=True),
+                voyager_context=_build_preview_context(site),
                 voyager_cms_preview=True):
             rendered = cls.render_element_content(
-                element.model.name, element.schema)
+                element.model.name,
+                element.schema)
             if site:
                 # element sense header footer
                 rendered = cls.render_with_site_layout(
@@ -1079,8 +1098,10 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         return cls._ensure_preview_document(
             content, site=site, model_name=element.model.name)
 
-    @fields.depends('model', 'schema')
+    @fields.depends('model', 'schema', 'show_preview_fields', 'page')
     def get_preview(self, name=None):
+        if not self.page:
+            return b''
         try:
             content = self.render_preview_content(self)
         except Exception as exc:
@@ -1104,7 +1125,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
 class Schema(ModelSQL, ModelView):
     __name__ = 'www.schema'
 
-    component = fields.Many2One('www.element', 'Element',
+    element = fields.Many2One('www.element', 'Element',
         ondelete='CASCADE')
     model_name = fields.Function(fields.Char('Model Name'),
         'on_change_with_model_name')
@@ -1150,10 +1171,10 @@ class Schema(ModelSQL, ModelView):
             return content_fields
 
         try:
-            component = Pool().get(model_name)
+            model = Pool().get(model_name)
         except Exception:
             return content_fields
-        fields_ = getattr(component, '__fields__', None)
+        fields_ = getattr(model, '__fields__', None)
         if callable(fields_):
             fields_ = fields_()
         if isinstance(fields_, str):
@@ -1165,23 +1186,23 @@ class Schema(ModelSQL, ModelView):
             return fields_
         return content_fields
 
-    @fields.depends('component', '_parent_component.model')
+    @fields.depends('element', '_parent_element.model')
     def on_change_with_model_name(self, name=None):
-        if self.component and self.component.model:
-            return self.component.model.name
+        if self.element and self.element.model:
+            return self.element.model.name
         return None
 
-    @fields.depends('component', '_parent_component.page_state')
+    @fields.depends('element', '_parent_element.page_state')
     def on_change_with_page_state(self, name=None):
-        if self.component:
-            return self.component.page_state
+        if self.element:
+            return self.element.page_state
         return None
 
-    @fields.depends('component', '_parent_component.model')
+    @fields.depends('element', '_parent_element.model')
     def on_change_with_visible_fields(self, name=None):
         model_name = None
-        if self.component and self.component.model:
-            model_name = self.component.model.name
+        if self.element and self.element.model:
+            model_name = self.element.model.name
         return self._schema_fields_for_model(model_name)
 
 
@@ -1203,23 +1224,24 @@ class ContentWrapper(Endpoint):
     def render(self):
         pool = Pool()
         Element = pool.get('www.element')
-        layout_component = _safe_related(self.site, 'layout') if self.site else None
+        context = getattr(Transaction(), 'context', {}) or {}
+        layout_element = self.site.layout if self.site else None
         layout = None
-        if layout_component and layout_component.model:
-            LayoutModel = pool.get(layout_component.model.name)
+        if layout_element and layout_element.model:
+            LayoutModel = pool.get(layout_element.model.name)
             layout = LayoutModel(
                 **Element.get_element_kwargs(
-                    LayoutModel, layout_component.schema))
+                    LayoutModel, layout_element.schema))
 
         def _render_layout(content, title):
             if self.site:
                 with div() as wrapped:
-                    header_component = _safe_related(self.site, 'header')
-                    if header_component and header_component.model:
+                    header_element = self.site.header
+                    if header_element and header_element.model:
                         try:
-                            HeaderModel = pool.get(header_component.model.name)
+                            HeaderModel = pool.get(header_element.model.name)
                             HeaderModel(**Element.get_element_kwargs(
-                                HeaderModel, header_component.schema)).tag()
+                                HeaderModel, header_element.schema)).tag()
                         except Exception:
                             pass
 
@@ -1229,12 +1251,12 @@ class ContentWrapper(Endpoint):
                         else:
                             raw(str(content))
 
-                    footer_component = _safe_related(self.site, 'footer')
-                    if footer_component and footer_component.model:
+                    footer_element = self.site.footer
+                    if footer_element and footer_element.model:
                         try:
-                            FooterModel = pool.get(footer_component.model.name)
+                            FooterModel = pool.get(footer_element.model.name)
                             FooterModel(**Element.get_element_kwargs(
-                                FooterModel, footer_component.schema)).tag()
+                                FooterModel, footer_element.schema)).tag()
                         except Exception:
                             try:
                                 pool.get('www.footer')().tag()
@@ -1276,9 +1298,9 @@ class VoyagerURI(metaclass=PoolMeta):
 class VoyagerMenu(metaclass=PoolMeta):
     __name__ = 'www.menu'
 
-    component = fields.Many2One('www.element', 'Element',
+    element = fields.Many2One('www.element', 'Element',
         states={
-            'invisible': Eval('type') != 'component',
+            'invisible': Eval('type') != 'element',
         },
         depends=['type'],
         ondelete='SET NULL')
@@ -1304,7 +1326,8 @@ class VoyagerMenu(metaclass=PoolMeta):
     @classmethod
     def __setup__(cls):
         super().__setup__()
-        cls.type.selection.append(('component', 'Element'))
+        if ('element', 'Element') not in cls.type.selection:
+            cls.type.selection.append(('element', 'Element'))
 
 
 class SiteLang(ModelSQL):
@@ -1428,13 +1451,18 @@ class ComponentCMS(Component):
     __fields__ = []
 
     @staticmethod
-    def _render_child_component(name, schema=None):
+    def _render_child_element(name=None, schema=None, element=None):
         pool = Pool()
+        if element is not None:
+            name = element.model.name if element and element.model else None
+            schema = element.schema if element else schema
+        if not name:
+            return None
 
         try:
-            ComponentModel = pool.get(name)
+            ElementModel = pool.get(name)
             if schema:
-                return ComponentModel(schema=schema).tag()
-            return ComponentModel().tag()
+                return ElementModel(schema=schema).tag()
+            return ElementModel().tag()
         except Exception:
             return None
