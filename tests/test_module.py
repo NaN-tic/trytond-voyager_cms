@@ -17,8 +17,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
     module = 'voyager_cms'
 
     @with_transaction()
-    def test_component_kwargs_use_schema_record(self):
-        Component = Pool().get('www.component')
+    def test_element_kwargs_use_schema_record(self):
+        Element = Pool().get('www.element')
         Schema = Pool().get('www.schema')
 
         schema = Schema()
@@ -28,13 +28,13 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 'schema': object(),
             }
 
-        kwargs = Component.get_component_kwargs(DummyModel, [schema])
+        kwargs = Element.get_element_kwargs(DummyModel, [schema])
 
         self.assertIs(kwargs['schema'], schema)
 
     @with_transaction()
-    def test_component_schema_uses_first_schema_record(self):
-        Component = Pool().get('www.component')
+    def test_element_schema_uses_first_schema_record(self):
+        Element = Pool().get('www.element')
         Schema = Pool().get('www.schema')
 
         first = Schema()
@@ -45,13 +45,13 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 'schema': object(),
             }
 
-        kwargs = Component.get_component_kwargs(DummyModel, [first, second])
+        kwargs = Element.get_element_kwargs(DummyModel, [first, second])
 
         self.assertIs(kwargs['schema'], first)
 
     @with_transaction()
-    def test_component_kwargs_build_preview_schema_without_schema(self):
-        Component = Pool().get('www.component')
+    def test_element_kwargs_build_preview_schema_without_schema(self):
+        Element = Pool().get('www.element')
 
         class DummyModel:
             _fields = {
@@ -59,7 +59,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
             }
 
         with Transaction().set_context(voyager_cms_preview=True):
-            kwargs = Component.get_component_kwargs(DummyModel)
+            kwargs = Element.get_element_kwargs(DummyModel)
 
         self.assertIn('schema', kwargs)
         schema = kwargs['schema']
@@ -80,20 +80,25 @@ class VoyagerCmsTestCase(ModuleTestCase):
             self.assertIsNotNone(kwargs['schema'].date)
 
     @with_transaction()
-    def test_component_kwargs_merge_preview_schema_with_blank_schema(self):
-        Component = Pool().get('www.component')
-        Schema = Pool().get('www.schema')
+    def test_element_kwargs_merge_preview_schema_with_blank_schema(self):
+        Element = Pool().get('www.element')
 
         class DummyModel:
             _fields = {
                 'schema': object(),
             }
 
-        schema = Schema()
-        schema.title = ''
+        preview_schema = SimpleNamespace(
+            _fields={'title': fields.Char('Title')},
+            title='Preview title',
+        )
+        schema = SimpleNamespace(title='')
 
-        with Transaction().set_context(voyager_cms_preview=True):
-            kwargs = Component.get_component_kwargs(DummyModel, schema)
+        with patch.object(
+                Element, '_build_preview_schema',
+                return_value=preview_schema):
+            with Transaction().set_context(voyager_cms_preview=True):
+                kwargs = Element.get_element_kwargs(DummyModel, schema)
 
         self.assertIn('schema', kwargs)
         self.assertNotEqual(kwargs['schema'].title, '')
@@ -116,19 +121,24 @@ class VoyagerCmsTestCase(ModuleTestCase):
     @with_transaction()
     def test_element_kwargs_keep_preview_with_schema_when_disabled(self):
         Element = Pool().get('www.element')
-        Schema = Pool().get('www.schema')
 
         class DummyModel:
             _fields = {
                 'schema': object(),
             }
 
-        schema = Schema()
-        schema.title = ''
+        preview_schema = SimpleNamespace(
+            _fields={'title': fields.Char('Title')},
+            title='Preview title',
+        )
+        schema = SimpleNamespace(title='')
 
-        with Transaction().set_context(voyager_cms_preview=True):
-            kwargs = Element.get_element_kwargs(
-                DummyModel, schema, show_preview_fields=False)
+        with patch.object(
+                Element, '_build_preview_schema',
+                return_value=preview_schema):
+            with Transaction().set_context(voyager_cms_preview=True):
+                kwargs = Element.get_element_kwargs(
+                    DummyModel, schema, show_preview_fields=False)
 
         self.assertIn('schema', kwargs)
 
@@ -136,29 +146,42 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_render_element_content_still_renders_when_preview_disabled(self):
         Element = Pool().get('www.element')
 
-        with Transaction().set_context(voyager_cms_preview=True):
-            content = Element.render_element_content(
-                'test.component', show_preview_fields=False)
+        class DummyElementModel:
+            def __init__(self, **kwargs):
+                pass
+
+            def tag(self):
+                return div('Rendered')
+
+        pool_mock = SimpleNamespace(
+            get=lambda name: DummyElementModel if name == 'test.component' else None,
+        )
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            with Transaction().set_context(voyager_cms_preview=True):
+                content = Element.render_element_content(
+                    'test.component', show_preview_fields=False)
 
         self.assertTrue(getattr(content, 'children', []))
 
     @with_transaction()
-    def test_component_kwargs_skip_preview_schema_for_models_without_schema(self):
-        Component = Pool().get('www.component')
+    def test_element_kwargs_skip_preview_schema_for_models_without_schema(self):
+        Element = Pool().get('www.element')
 
         class DummyModel:
             _fields = {}
 
         with Transaction().set_context(voyager_cms_preview=True):
-            kwargs = Component.get_component_kwargs(DummyModel)
+            kwargs = Element.get_element_kwargs(DummyModel)
 
         self.assertEqual(kwargs, {})
 
     @with_transaction()
     def test_preview_image_uses_svg_data_uri(self):
-        Component = Pool().get('www.component')
+        Element = Pool().get('www.element')
 
-        preview_image = Component._preview_image()
+        preview_image = Element._preview_image()
 
         self.assertTrue(preview_image.startswith('data:image/svg+xml,'))
 
@@ -274,19 +297,31 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(model_ids, [7, 9])
 
     @with_transaction()
-    def test_page_on_change_name_creates_default_uris(self):
+    def test_page_default_uris_use_site_languages(self):
         Page = Pool().get('www.page')
+        site = SimpleNamespace(langs=[
+            SimpleNamespace(code='ca'),
+            SimpleNamespace(code='en'),
+            SimpleNamespace(code='es'),
+        ])
 
-        page = Page()
-        page.name = 'Hello World'
-        page.site = None
-        page.state = 'draft'
-        page.uris = []
+        class LangModel:
+            @staticmethod
+            def search(domain):
+                return [
+                    SimpleNamespace(id=1, code='ca'),
+                    SimpleNamespace(id=2, code='en'),
+                    SimpleNamespace(id=3, code='es'),
+                ]
 
-        page.on_change_name()
+        pool_mock = SimpleNamespace(get=lambda name: LangModel)
+
+        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            uris = Page._default_uris('Hello World', site=site, state='draft')
 
         self.assertEqual(
-            sorted(uri.uri for uri in page.uris),
+            sorted(uri['uri'] for uri in uris),
             ['/draft/ca/hello-world',
              '/draft/en/hello-world',
              '/draft/es/hello-world'])
@@ -295,8 +330,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_page_uris_field_is_editable_in_draft(self):
         Page = Pool().get('www.page')
 
-        field = Page.uris.field
-        self.assertFalse(field.readonly)
+        field = Page._fields['uris']
+        self.assertEqual(field.setter, 'set_uris')
         self.assertIn('readonly', field.states)
 
     @with_transaction()
@@ -359,6 +394,9 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_page_generate_uri_uses_selected_main_uri_language(self):
         Page = Pool().get('www.page')
 
+        class PageRecord:
+            __hash__ = object.__hash__
+
         class LangRecord:
             def __init__(self, id, code):
                 self.id = id
@@ -385,8 +423,29 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 self._next_id = 1
 
             def search(self, domain, order=None, limit=None):
-                # Only searches on resource/site, return everything in memory.
-                return list(self._records)
+                records = list(self._records)
+                for field, operator, value in domain:
+                    if field == 'resource' and operator == '=':
+                        records = [
+                            record for record in records
+                            if getattr(record, 'resource', None) == value
+                        ]
+                    elif field == 'site' and operator == '=':
+                        records = [
+                            record for record in records
+                            if getattr(getattr(record, 'site', None), 'id', None) == value
+                        ]
+                    elif field == 'uri' and operator == '=':
+                        records = [
+                            record for record in records
+                            if record.uri == value
+                        ]
+                    elif field == 'id' and operator == 'not in':
+                        records = [
+                            record for record in records
+                            if record.id not in value
+                        ]
+                return records[:limit] if limit else records
 
             def create(self, values_list):
                 created = []
@@ -395,6 +454,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
                     rec = UriRecord(
                         self._next_id, values['uri'], language)
                     self._next_id += 1
+                    rec.resource = values['resource']
+                    rec.site = SimpleNamespace(id=values['site'])
                     self._records.append(rec)
                     created.append(rec)
                 return created
@@ -423,15 +484,14 @@ class VoyagerCmsTestCase(ModuleTestCase):
         uri_model = UriModel()
 
         site = SimpleNamespace(id=3, langs=[es, en])
-        page = SimpleNamespace(
-            __name__='www.page',
-            id=5,
-            name='Hello World',
-            site=site,
-            state='draft',
-            main_uri_language=en,
-            rec_name='Hello World',
-        )
+        page = PageRecord()
+        page.__name__ = 'www.page'
+        page.id = 5
+        page.name = 'Hello World'
+        page.site = site
+        page.state = 'draft'
+        page.main_uri_language = en
+        page.rec_name = 'Hello World'
 
         pool_mock = SimpleNamespace()
 
@@ -458,19 +518,27 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_generate_uri_preserves_manually_edited_uri(self):
         Page = Pool().get('www.page')
 
-        page = SimpleNamespace(
-            __name__='www.page',
-            id=5,
-            site=SimpleNamespace(id=3),
-            state='draft',
-            name='Hello World',
-            rec_name='Hello World',
+        class PageRecord:
+            __hash__ = object.__hash__
+
+        language = SimpleNamespace(id=1, code='en')
+
+        page = PageRecord()
+        page.__name__ = 'www.page'
+        page.id = 5
+        page.site = SimpleNamespace(
+            id=3,
+            langs=[language],
         )
+        page.state = 'draft'
+        page.name = 'Hello World'
+        page.rec_name = 'Hello World'
+        page.main_uri_language = language
 
         existing_uri = SimpleNamespace(
             id=10,
             uri='/draft/en/test',
-            language=SimpleNamespace(code='en'),
+            language=language,
             site=page.site,
             main_uri=None,
         )
@@ -520,31 +588,14 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn('endpoint', written[0][1])
 
     @with_transaction()
-    def test_fill_uris_only_updates_missing_values(self):
+    def test_uri_from_name_builds_expected_slug(self):
         Page = Pool().get('www.page')
-
-        empty_uri = SimpleNamespace(
-            language=SimpleNamespace(code='es'),
-            uri=None,
-        )
-        existing_uri = SimpleNamespace(
-            language=SimpleNamespace(code='en'),
-            uri='/en/custom',
-        )
-        unsupported_uri = SimpleNamespace(
-            language=SimpleNamespace(code='fr'),
-            uri=None,
-        )
-
-        changed = Page._fill_uris(
-            [empty_uri, existing_uri, unsupported_uri],
-            'Hello World',
-        )
-
-        self.assertEqual(changed, [empty_uri])
-        self.assertEqual(empty_uri.uri, '/es/hello-world')
-        self.assertEqual(existing_uri.uri, '/en/custom')
-        self.assertIsNone(unsupported_uri.uri)
+        self.assertEqual(
+            Page._uri_from_name('Hello World', 'es', state='published'),
+            '/es/hello-world')
+        self.assertEqual(
+            Page._uri_from_name('Hello World', 'es', state='draft'),
+            '/draft/es/hello-world')
 
     @with_transaction()
     def test_state_uri_prefix_is_generic(self):
@@ -619,16 +670,12 @@ class VoyagerCmsTestCase(ModuleTestCase):
         Element = pool.get('www.element')
         Schema = pool.get('www.schema')
         Menu = pool.get('www.menu')
-        URI = pool.get('www.uri')
         Site = pool.get('www.site')
         SiteLang = pool.get('www.site.lang')
 
         self.assertEqual(Page._fields['site'].ondelete, 'CASCADE')
         self.assertEqual(Element._fields['page'].ondelete, 'CASCADE')
         self.assertEqual(Schema._fields['element'].ondelete, 'CASCADE')
-        self.assertEqual(URI._fields['site'].ondelete, 'CASCADE')
-        self.assertEqual(Menu._fields['site'].ondelete, 'CASCADE')
-        self.assertEqual(Menu._fields['uri'].ondelete, 'SET NULL')
         self.assertEqual(Menu._fields['element'].ondelete, 'SET NULL')
         self.assertEqual(Site._fields['header'].ondelete, 'SET NULL')
         self.assertEqual(Site._fields['footer'].ondelete, 'SET NULL')
@@ -765,8 +812,6 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         element = Element()
         element.page = None
-        element.model = SimpleNamespace(name='test.component')
-        element.schema = None
         element.show_preview_fields = True
 
         preview = element.get_preview()

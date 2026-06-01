@@ -10,7 +10,6 @@ from trytond.i18n import gettext as _
 
 from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
 from trytond.pool import Pool, PoolMeta
-from trytond.exceptions import UserError
 from trytond.i18n import gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
@@ -20,8 +19,7 @@ from trytond.url import http_host
 PAGE_STATES = {'readonly': Eval('state') != 'draft'}
 PAGE_DEPENDS = ['state']
 CHILD_PAGE_STATES = {
-    'readonly': Bool(Eval('page'))
-    & (Eval('_parent_page', {}).get('state') != 'draft')
+    'readonly': Bool(Eval('page')) & (Eval('_parent_page', {}).get('state') != 'draft')
 }
 CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
 
@@ -128,7 +126,7 @@ def _build_preview_voyager_context(site):
     )
 
 
-def _get_voyager_context(site=None, preview=False):
+def _get_voyager_context(site=None):
     context = getattr(Transaction(), 'context', {}) or {}
     current = context.get('voyager_context')
     if not current:
@@ -139,10 +137,6 @@ def _get_voyager_context(site=None, preview=False):
     }
     values['site'] = site or getattr(current, 'site', None)
     return VoyagerContext(**values)
-
-
-def _build_preview_context(site=None):
-    return _build_preview_voyager_context(site)
 
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
@@ -668,21 +662,13 @@ class Page(Workflow, ModelSQL, ModelView):
         for page in pages:
             cls._freeze_published_copy(page)
 
-    @staticmethod
-    def _preview_message(message):
-        return Element._build_preview_document(
-            '<div style="padding: 1rem; color: #666; font-family: sans-serif;">'
-            f'{escape(message)}'
-            '</div>'
-        )
-
     @classmethod
     def render_preview_content(cls, page):
         pool = Pool()
         Wrapper = pool.get('www.content.wrapper')
         site = page.site if page and page.site else None
         with Transaction().set_context(
-                voyager_context=_build_preview_context(site),
+                voyager_context=_build_preview_voyager_context(site),
                 voyager_cms_preview=True):
             rendered = Wrapper(page=page).render()
         if hasattr(rendered, 'render'):
@@ -690,15 +676,23 @@ class Page(Workflow, ModelSQL, ModelView):
         else:
             content = str(rendered or '')
         if not (content or '').strip():
-            return cls._preview_message('No preview available.')
-        return Element._ensure_preview_document(content, site=site)
+            return Element._build_preview_document(
+                '<div style="padding: 1rem; color: #666; font-family: '
+                'sans-serif;">'
+                'No preview available.'
+                '</div>',
+                site=site)
+        return Element._build_preview_document(content, site=site)
 
     @fields.depends('site', 'name', 'element')
     def get_preview(self, name=None):
         if not self.site:
-            return self._preview_message(
+            return Element._build_preview_document(
+                '<div style="padding: 1rem; color: #666; font-family: '
+                'sans-serif;">'
                 'Select a site to preview the page.'
-            ).encode()
+                '</div>',
+                site=None).encode()
         try:
             return self.render_preview_content(self).encode()
         except Exception as exc:
@@ -751,12 +745,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     @classmethod
     def view_attributes(cls):
         return super().view_attributes() + [
-            ('/form/notebook/page[@id="properties"]/label[@name="show_preview_fields"]', 'states', {
-                    'invisible': ~Bool(Eval('page')),
-                    }),
-            ('/form/notebook/page[@id="properties"]/field[@name="show_preview_fields"]', 'states', {
-                    'invisible': ~Bool(Eval('page')),
-                    }),
             ('/form/notebook/page[@id="preview"]', 'states', {
                     'invisible': ~Bool(Eval('show_preview_fields', True)),
                     }),
@@ -819,17 +807,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         )
 
     @classmethod
-    def _preview_char_value(cls, field):
-        return 'Preview'
-
-    @classmethod
-    def _preview_text_value(cls, field):
-        return (
-            'Preview content. This placeholder is shown until a schema with '
-            'real content is assigned.'
-        )
-
-    @classmethod
     def _preview_selection_value(cls, field_name, field):
         options = getattr(field, 'selection', None) or []
         if isinstance(options, str):
@@ -875,9 +852,12 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         if isinstance(field, fields.Binary):
             return cls._preview_image().encode('utf-8')
         if isinstance(field, fields.Char):
-            return cls._preview_char_value(field)
+            return 'Preview'
         if isinstance(field, fields.Text):
-            return cls._preview_text_value(field)
+            return (
+                'Preview content. This placeholder is shown until a schema '
+                'with real content is assigned.'
+            )
         return None
 
     @classmethod
@@ -985,17 +965,6 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         )
 
     @classmethod
-    def _ensure_preview_document(cls, content, site=None, model_name=None):
-        lower = content[:500].lower()
-        if (
-                content.lstrip().lower().startswith('<!doctype html>')
-                or '<html' in lower):
-            return cls._build_preview_document(
-                content, site=site, model_name=model_name)
-        return cls._build_preview_document(
-            content, site=site, model_name=model_name)
-
-    @classmethod
     def render_with_site_layout(
             cls, site, content, title, preview_chrome=False):
         if not site:
@@ -1013,8 +982,8 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     LayoutModel, layout_element.schema))
         with Transaction().set_context(
                 voyager_context=(
-                    _build_preview_context(site)
-                    if preview else _get_voyager_context(site, preview=False)),
+                    _build_preview_voyager_context(site)
+                    if preview else _get_voyager_context(site)),
                 voyager_cms_preview=preview):
             if preview and site and not preview_chrome:
                 with div() as wrapped:
@@ -1073,7 +1042,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
     def render_preview_content(cls, element):
         site = element.page.site if element.page and element.page.site else None
         with Transaction().set_context(
-                voyager_context=_build_preview_context(site),
+                voyager_context=_build_preview_voyager_context(site),
                 voyager_cms_preview=True):
             rendered = cls.render_element_content(
                 element.model.name,
@@ -1095,7 +1064,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                 '</div>',
                 site=site,
                 model_name=element.model.name)
-        return cls._ensure_preview_document(
+        return cls._build_preview_document(
             content, site=site, model_name=element.model.name)
 
     @fields.depends('model', 'schema', 'show_preview_fields', 'page')
@@ -1134,23 +1103,6 @@ class Schema(ModelSQL, ModelView):
     visible_fields = fields.Function(
         fields.MultiSelection('get_schema_fields', 'Visible Fields'),
         'on_change_with_visible_fields')
-
-    @classmethod
-    def __register__(cls, module_name):
-        table = cls.__table_handler__(module_name)
-        if table.column_exist('element') and not table.column_exist('component'):
-            table.column_rename('element', 'component')
-
-        super().__register__(module_name)
-
-        table = cls.__table_handler__(module_name)
-        if table.column_exist('element') and table.column_exist('component'):
-            cursor = Transaction().connection.cursor()
-            cursor.execute("""
-                UPDATE www_schema
-                SET component = element
-                WHERE component IS NULL AND element IS NOT NULL
-            """)
 
     @classmethod
     def _schema_content_fields(cls):
@@ -1224,7 +1176,6 @@ class ContentWrapper(Endpoint):
     def render(self):
         pool = Pool()
         Element = pool.get('www.element')
-        context = getattr(Transaction(), 'context', {}) or {}
         layout_element = self.site.layout if self.site else None
         layout = None
         if layout_element and layout_element.model:
@@ -1304,24 +1255,6 @@ class VoyagerMenu(metaclass=PoolMeta):
         },
         depends=['type'],
         ondelete='SET NULL')
-
-    @classmethod
-    def __register__(cls, module_name):
-        super().__register__(module_name)
-        cursor = Transaction().connection.cursor()
-        cursor.execute("""
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_name = 'www_menu' AND column_name = 'element'
-        """)
-        has_element_column = bool(cursor.fetchone())
-        if not has_element_column:
-            return
-        cursor.execute("""
-            UPDATE www_menu
-            SET element = component
-            WHERE element IS NULL AND component IS NOT NULL
-        """)
 
     @classmethod
     def __setup__(cls):
