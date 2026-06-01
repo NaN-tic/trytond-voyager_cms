@@ -750,9 +750,9 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
                     }),
             ]
 
-    @staticmethod
-    def default_valid_models():
-        return Element._element_model_ids()
+    @classmethod
+    def default_valid_models(cls):
+        return cls._element_model_ids()
 
     @staticmethod
     def _element_model_ids():
