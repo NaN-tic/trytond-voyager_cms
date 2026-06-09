@@ -215,8 +215,8 @@ class Page(Workflow, ModelSQL, ModelView):
         if self.main_uri_language and self.main_uri_language.id in (
                 self.available_languages or []):
             return
-        if self.available_languages:
-            self.main_uri_language = self.available_languages[0]
+        if self.site.main_lang:
+            self.main_uri_language = self.site.main_lang
         else:
             self.main_uri_language = None
 
@@ -470,7 +470,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 ('resource', '=', resource_ref),
                 ('main_uri', '=', None),
                 ])
-        if len(main_uris) > 1:
+        if self.main_uri_language and len(main_uris) > 1:
             raise UserError(
                 gettext('voyager_cms.msg_page_main_uri_unique',
                   page=self.rec_name)
@@ -649,7 +649,6 @@ class Page(Workflow, ModelSQL, ModelView):
                 'origin_page': page.id,
                 'published_page': None,
                 })
-        cls._sync_page_uris([published_page], force=True)
         cls.generate_uri([published_page])
         cls.write([page], {'published_page': published_page.id})
         return published_page
@@ -1277,6 +1276,7 @@ class VoyagerSite(metaclass=PoolMeta):
     header = fields.Many2One('www.element', 'Header', ondelete='SET NULL')
     footer = fields.Many2One('www.element', 'Footer', ondelete='SET NULL')
     layout = fields.Many2One('www.element', 'Layout', ondelete='SET NULL')
+    main_lang = fields.Many2One('ir.lang', 'Main Language', required=True)
     langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
 
     @staticmethod
