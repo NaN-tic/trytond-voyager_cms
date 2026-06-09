@@ -515,6 +515,20 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(by_code['es'].main_uri, by_code['en'].id)
 
     @with_transaction()
+    def test_page_on_change_site_without_site_clears_main_uri_language(self):
+        Page = Pool().get('www.page')
+        Lang = Pool().get('ir.lang')
+
+        page = Page()
+        page.site = None
+        page.available_languages = []
+        page.main_uri_language = Lang()
+
+        page.on_change_site()
+
+        self.assertIsNone(page.main_uri_language)
+
+    @with_transaction()
     def test_generate_uri_preserves_manually_edited_uri(self):
         Page = Pool().get('www.page')
 

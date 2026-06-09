@@ -215,7 +215,7 @@ class Page(Workflow, ModelSQL, ModelView):
         if self.main_uri_language and self.main_uri_language.id in (
                 self.available_languages or []):
             return
-        if self.site.main_lang:
+        if self.site and self.site.main_lang:
             self.main_uri_language = self.site.main_lang
         else:
             self.main_uri_language = None
