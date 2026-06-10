@@ -1395,7 +1395,7 @@ class ComponentCMS(Component):
         try:
             ElementModel = pool.get(name)
             if schema:
-                return ElementModel(schema=schema).tag()
+                return ElementModel(schema=schema[0]).tag()
             return ElementModel().tag()
         except Exception:
             return None
