@@ -9,7 +9,7 @@
             <field name="state"/>
             <group col="-1" colspan="2" id="buttons">
                 <button name="draft"/>
-                <button name="publish" icon="tryton-forward"/>
+                <button name="publish"/>
             </group>
             <field name="element" colspan="4" mode="tree,list-form,form" height="900"/>
         </page>

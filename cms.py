@@ -6,7 +6,6 @@ from dominate.tags import div
 from dominate.util import raw
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
-from trytond.config import config
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 
@@ -334,10 +333,12 @@ class Page(Workflow, ModelSQL, ModelView):
             'publish': {
                 'invisible': Eval('state') != 'draft',
                 'depends': ['state'],
+                'icon': 'tryton-forward',
                 },
             'draft': {
                 'invisible': Eval('state') != 'published',
                 'depends': ['state'],
+                'icon': 'tryton-back',
                 },
         })
 
@@ -468,6 +469,61 @@ class Page(Workflow, ModelSQL, ModelView):
                 URI.delete(uris)
 
     @classmethod
+    def _snapshot_uris(cls, page):
+        pool = Pool()
+        URI = pool.get('www.uri')
+        if not getattr(page, 'id', None):
+            return []
+        resource_ref = f'{page.__name__},{page.id}'
+        snapshot = []
+        for uri in URI.search([
+                    ('resource', '=', resource_ref),
+                ], order=[('id', 'ASC')]):
+            snapshot.append({
+                    'id': uri.id,
+                    'uri': uri.uri,
+                    'site': uri.site.id if getattr(uri, 'site', None) else None,
+                    'language': (
+                        uri.language.id if getattr(uri, 'language', None)
+                        else None),
+                    'endpoint': (
+                        uri.endpoint.id if getattr(uri, 'endpoint', None)
+                        else None),
+                    'main_uri': (
+                        uri.main_uri.id if getattr(uri, 'main_uri', None)
+                        else None),
+                    })
+        return snapshot
+
+    @classmethod
+    def _restore_uris(cls, page, snapshot):
+        if not snapshot:
+            return
+        pool = Pool()
+        URI = pool.get('www.uri')
+        cls._delete_generated_uris([page])
+        resource_ref = f'{page.__name__},{page.id}'
+        created_by_old_id = {}
+        main_links = []
+        for row in snapshot:
+            values = {
+                'resource': resource_ref,
+                'uri': row['uri'],
+                'site': row['site'],
+                'language': row['language'],
+                'endpoint': row['endpoint'],
+            }
+            created, = URI.create([values])
+            created_by_old_id[row['id']] = created
+            if row.get('main_uri'):
+                main_links.append((created, row['main_uri']))
+        if main_links:
+            for created, old_main_id in main_links:
+                main_uri = created_by_old_id.get(old_main_id)
+                if main_uri:
+                    URI.write([created], {'main_uri': main_uri.id})
+
+    @classmethod
     def _find_published_pages_to_replace(cls, page):
         # finds the published copy that must be removed before publishing again
         pool = Pool()
@@ -538,6 +594,20 @@ class Page(Workflow, ModelSQL, ModelView):
             return None
         prefix = cls._state_uri_prefix(state)
         return f'{prefix}/{code}/{base}'
+
+    @classmethod
+    def _sync_uri_state_prefix(cls, uri, state):
+        if not uri:
+            return uri
+        draft_prefix = cls._state_uri_prefix('draft')
+        if state == 'draft':
+            if uri.startswith(draft_prefix):
+                return uri
+            return f'{draft_prefix}{uri}'
+        if state == 'published' and uri.startswith(draft_prefix):
+            synced = uri[len(draft_prefix):]
+            return synced or '/'
+        return uri
 
     @classmethod
     def _site_lang_codes(cls, site):
@@ -677,7 +747,8 @@ class Page(Workflow, ModelSQL, ModelView):
                 code = language.code if language else None
                 existing = existing_uris_by_language.get(code) if code else None
                 if existing and getattr(existing, 'uri', None):
-                    uri_value = existing.uri
+                    uri_value = cls._sync_uri_state_prefix(
+                        existing.uri, page.state or 'draft')
                 # Ensure any existing URI missing endpoint gets fixed by the
                 # regeneration.
                 if uri_value:
@@ -801,7 +872,15 @@ class Page(Workflow, ModelSQL, ModelView):
     def draft(cls, pages):
         # creates the frozen published copy and keeps editing on the same page
         for page in pages:
-            cls._freeze_published_copy(page)
+            uri_snapshot = cls._snapshot_uris(page)
+            if page.state != 'draft':
+                cls.write([page], {'state': 'draft'})
+                try:
+                    page.state = 'draft'
+                except Exception:
+                    pass
+            published_page = cls._freeze_published_copy(page)
+            cls._restore_uris(published_page, uri_snapshot)
 
     @classmethod
     def render_preview_content(cls, page):
@@ -1445,15 +1524,16 @@ class VoyagerSite(metaclass=PoolMeta):
         'www.site.lang', 'site', 'language', 'Languages')
 
     @staticmethod
-    def _allow_page_state_in_environment(page):
-        # en produccio nomes deixa veure published
+    def _allow_page_state_in_environment(page, web_prefix=None):
         if not page:
             return True
-        production = config.getboolean('database', 'production', default=False)
-        if production:
-            return page.state == 'published'
-        # en dev nomes deixa veure draft
-        return page.state == 'draft'
+        # Requests coming from Tryton routes always pass a web_prefix and must
+        # keep draft pages reachable for internal use and development.
+        if web_prefix:
+            return True
+        # Standalone voyager/app.py requests do not pass a web_prefix and must
+        # expose only published pages.
+        return page.state == 'published'
 
     def match_request(self, request, web_prefix=None):
         pool = Pool()
@@ -1480,7 +1560,8 @@ class VoyagerSite(metaclass=PoolMeta):
                     resource_model = getattr(resource, '__name__', None)
                     if resource_model == 'www.page':
                         # si l'estat no toca, ignora la uri
-                        if not self._allow_page_state_in_environment(resource):
+                        if not self._allow_page_state_in_environment(
+                                resource, web_prefix):
                             voyager_uri = None
 
                 if voyager_uri:
