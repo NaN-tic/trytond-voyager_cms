@@ -8,9 +8,9 @@
         <field name="header"/>
         <label name="footer"/>
         <field name="footer"/>
-        <label name="main_lang"/>
-        <field name="main_lang"/>
-        <field name="langs" colspan="4" mode="tree,form" height="200"/>
+        <label name="main_language"/>
+        <field name="main_language"/>
+        <field name="languages" colspan="4" mode="tree,form" height="200"/>
         <newline/>
     </xpath>
 </data>
