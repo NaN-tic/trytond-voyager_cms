@@ -34,13 +34,57 @@ msgctxt "field:www.element,schema:"
 msgid "Schema"
 msgstr "Esquema"
 
-msgctxt "field:www.menu,component:"
+msgctxt "field:www.element,show_preview_fields:"
+msgid "Show Preview Fields"
+msgstr "Mostrar campos de vista previa"
+
+msgctxt "field:www.element,valid_models:"
+msgid "Valid Models"
+msgstr "Modelos válidos"
+
+msgctxt "field:www.file,download:"
+msgid "Download"
+msgstr "Descargar"
+
+msgctxt "field:www.file,file:"
+msgid "File"
+msgstr "Archivo"
+
+msgctxt "field:www.file,filename:"
+msgid "Filename"
+msgstr "Nombre del archivo"
+
+msgctxt "field:www.file,name:"
+msgid "Name"
+msgstr "Nombre"
+
+msgctxt "field:www.file,site:"
+msgid "Site"
+msgstr "Sitio"
+
+msgctxt "field:www.file,uri:"
+msgid "URI"
+msgstr "URI"
+
+msgctxt "field:www.file.wrapper,file:"
+msgid "File"
+msgstr "Archivo"
+
+msgctxt "field:www.menu,element:"
 msgid "Element"
 msgstr "Elemento"
+
+msgctxt "field:www.page,available_languages:"
+msgid "Available Languages"
+msgstr "Idiomas disponibles"
 
 msgctxt "field:www.page,element:"
 msgid "Elements"
 msgstr "Elementos"
+
+msgctxt "field:www.page,main_uri_language:"
+msgid "Idioma"
+msgstr "Idioma"
 
 msgctxt "field:www.page,name:"
 msgid "Name"
@@ -74,23 +118,7 @@ msgctxt "field:www.page,uris:"
 msgid "URIs"
 msgstr "URIs"
 
-msgctxt "field:www.page.uri,language:"
-msgid "Idioma"
-msgstr "Idioma"
-
-msgctxt "field:www.page.uri,main_uri:"
-msgid "Main URI"
-msgstr "URI principal"
-
-msgctxt "field:www.page.uri,page:"
-msgid "Page"
-msgstr "Página"
-
-msgctxt "field:www.page.uri,uri:"
-msgid "URI"
-msgstr "URI"
-
-msgctxt "field:www.schema,component:"
+msgctxt "field:www.schema,element:"
 msgid "Element"
 msgstr "Elemento"
 
@@ -114,13 +142,17 @@ msgctxt "field:www.site,header:"
 msgid "Header"
 msgstr "Cabecera"
 
-msgctxt "field:www.site,langs:"
+msgctxt "field:www.site,languages:"
 msgid "Languages"
 msgstr "Idiomas"
 
 msgctxt "field:www.site,layout:"
 msgid "Layout"
 msgstr "Diseño"
+
+msgctxt "field:www.site,main_language:"
+msgid "Main Language"
+msgstr "Idioma principal"
 
 msgctxt "field:www.site.lang,language:"
 msgid "Language"
@@ -130,9 +162,21 @@ msgctxt "field:www.site.lang,site:"
 msgid "Site"
 msgstr "Sitio"
 
+msgctxt "help:www.file,download:"
+msgid ""
+"If checked, the file response is sent as an attachment and the browser will "
+"download it."
+msgstr ""
+"Si está marcada esta opción, la respuesta del archivo se envía como un "
+"archivo adjunto y el navegador lo descargará."
+
 msgctxt "model:ir.action,name:act_www_component"
 msgid "Elements"
 msgstr "Elementos"
+
+msgctxt "model:ir.action,name:act_www_file"
+msgid "All Files"
+msgstr "Todos los archivos"
 
 msgctxt "model:ir.action,name:act_www_page"
 msgid "All Pages"
@@ -154,6 +198,18 @@ msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_published"
 msgid "Published"
 msgstr "Publicado"
 
+msgctxt "model:ir.message,text:msg_file_generate_uri_missing_endpoint"
+msgid "Missing file wrapper endpoint for file URI generation."
+msgstr ""
+"Falta el punto final del contenedor de archivos para la generación de URI de"
+" archivos."
+
+msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
+msgid "Please set a site before generating URIs for file \"%(file)s\"."
+msgstr ""
+"Por favor, configure un sitio antes de generar URI para el archivo "
+"\"%(file)s\"."
+
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
 msgid "Missing content wrapper endpoint for page URI generation."
 msgstr ""
@@ -173,6 +229,10 @@ msgstr "Solo se puede seleccionar una URI principal para la página \"%(page)s\"
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."
+
+msgctxt "model:ir.model.button,string:www_file_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
 
 msgctxt "model:ir.model.button,string:www_page_draft_button"
 msgid "Draft"
@@ -194,6 +254,10 @@ msgctxt "model:ir.ui.menu,name:menu_www_component"
 msgid "Elements"
 msgstr "Elementos"
 
+msgctxt "model:ir.ui.menu,name:menu_www_file"
+msgid "Files"
+msgstr "Archivos"
+
 msgctxt "model:ir.ui.menu,name:menu_www_page"
 msgid "Pages"
 msgstr "Páginas"
@@ -203,20 +267,24 @@ msgid "Schemas"
 msgstr "Esquemas"
 
 msgctxt "model:www.content.wrapper,string:"
-msgid "Component"
-msgstr "Componente"
+msgid "Www Content Wrapper"
+msgstr "Contenedor de Contenido WWW"
 
 msgctxt "model:www.element,string:"
 msgid "Www Element"
 msgstr "Elemento WWW"
 
+msgctxt "model:www.file,string:"
+msgid "Www File"
+msgstr "Archivo WWW"
+
+msgctxt "model:www.file.wrapper,string:"
+msgid "Www File Wrapper"
+msgstr "Contenedor de archivo WWW"
+
 msgctxt "model:www.page,string:"
 msgid "Www Page"
 msgstr "Página WWW"
-
-msgctxt "model:www.page.uri,string:"
-msgid "Www Page Uri"
-msgstr "Uri de la página WWW"
 
 msgctxt "model:www.schema,string:"
 msgid "Www Schema"

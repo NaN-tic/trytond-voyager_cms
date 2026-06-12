@@ -12,6 +12,12 @@ this repository contains the full copyright notices and license terms. -->
         <record model="ir.message" id="msg_page_generate_uri_missing_site">
             <field name="text">Please set a site before generating URIs for page "%(page)s".</field>
         </record>
+        <record model="ir.message" id="msg_file_generate_uri_missing_endpoint">
+            <field name="text">Missing file wrapper endpoint for file URI generation.</field>
+        </record>
+        <record model="ir.message" id="msg_file_generate_uri_missing_site">
+            <field name="text">Please set a site before generating URIs for file "%(file)s".</field>
+        </record>
         <record model="ir.message" id="msg_page_missing_draft">
             <field name="text">The published page "%(page)s" has no linked draft.</field>
         </record>

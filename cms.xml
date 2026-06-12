@@ -3,6 +3,37 @@
 this repository contains the full copyright notices and license terms. -->
 <tryton>
     <data>
+        <!-- www.file -->
+        <record model="ir.ui.view" id="www_file_view_tree">
+            <field name="model">www.file</field>
+            <field name="type">tree</field>
+            <field name="name">file_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_file_view_form">
+            <field name="model">www.file</field>
+            <field name="type">form</field>
+            <field name="name">file_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_file">
+            <field name="name">All Files</field>
+            <field name="res_model">www.file</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_file_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_file_view_tree"/>
+            <field name="act_window" ref="act_www_file"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_file_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_file_view_form"/>
+            <field name="act_window" ref="act_www_file"/>
+        </record>
+        <record model="ir.model.button" id="www_file_generate_uri_button">
+            <field name="name">generate_uri</field>
+            <field name="string">Generate URI</field>
+            <field name="model">www.file</field>
+        </record>
+
         <!-- www.page -->
         <record model="ir.ui.view" id="www_page_view_tree">
             <field name="model">www.page</field>
@@ -147,6 +178,8 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <menuitem id="menu_voyager_cms" name="Voyager CMS" sequence="210"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_file"
+            name="Files" id="menu_www_file" sequence="5"/>
         <menuitem parent="menu_voyager_cms" action="act_www_page"
             name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
