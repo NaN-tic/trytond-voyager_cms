@@ -838,6 +838,138 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn('endpoint', written[0][1])
 
     @with_transaction()
+    def test_generate_uri_removes_draft_prefix_from_manual_uri_on_publish(self):
+        Page = Pool().get('www.page')
+
+        class PageRecord:
+            __hash__ = object.__hash__
+
+        language = SimpleNamespace(id=1, code='en')
+
+        page = PageRecord()
+        page.__name__ = 'www.page'
+        page.id = 5
+        page.site = SimpleNamespace(id=3, languages=[language])
+        page.state = 'published'
+        page.name = 'Hello World'
+        page.rec_name = 'Hello World'
+        page.main_uri_language = language
+
+        existing_uri = SimpleNamespace(
+            id=10,
+            uri='/draft/en/custom-slug',
+            language=language,
+            site=page.site,
+            main_uri=None,
+        )
+
+        written = []
+
+        def uri_search(domain, limit=None, order=None):
+            if ('resource', '=', 'www.page,5') in domain:
+                return [existing_uri]
+            return []
+
+        uri_model = SimpleNamespace(
+            search=uri_search,
+            delete=lambda records: None,
+            create=lambda values: [],
+            write=lambda records, values: written.append((records, values)),
+        )
+
+        endpoint_model = SimpleNamespace(name='www.content.wrapper')
+        endpoint_model.id = 99
+        model_model = SimpleNamespace(search=lambda *a, **k: [endpoint_model])
+
+        class DummyLang:
+            def __init__(self, _id):
+                self.id = _id
+                self.code = 'en'
+
+        pool_mock = SimpleNamespace(
+            get=lambda name: {
+                'www.uri': uri_model,
+                'ir.model': model_model,
+                'ir.lang': DummyLang,
+            }[name]
+        )
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock, \
+                patch.object(Page, '_default_uris',
+                    return_value=[{'language': 1, 'uri': '/en/hello-world'}]):
+            PoolMock.return_value = pool_mock
+            Page.generate_uri([page])
+
+        self.assertTrue(written)
+        self.assertEqual(written[0][1]['uri'], '/en/custom-slug')
+
+    @with_transaction()
+    def test_generate_uri_adds_draft_prefix_to_manual_uri_on_draft(self):
+        Page = Pool().get('www.page')
+
+        class PageRecord:
+            __hash__ = object.__hash__
+
+        language = SimpleNamespace(id=1, code='en')
+
+        page = PageRecord()
+        page.__name__ = 'www.page'
+        page.id = 5
+        page.site = SimpleNamespace(id=3, languages=[language])
+        page.state = 'draft'
+        page.name = 'Hello World'
+        page.rec_name = 'Hello World'
+        page.main_uri_language = language
+
+        existing_uri = SimpleNamespace(
+            id=10,
+            uri='/en/custom-slug',
+            language=language,
+            site=page.site,
+            main_uri=None,
+        )
+
+        written = []
+
+        def uri_search(domain, limit=None, order=None):
+            if ('resource', '=', 'www.page,5') in domain:
+                return [existing_uri]
+            return []
+
+        uri_model = SimpleNamespace(
+            search=uri_search,
+            delete=lambda records: None,
+            create=lambda values: [],
+            write=lambda records, values: written.append((records, values)),
+        )
+
+        endpoint_model = SimpleNamespace(name='www.content.wrapper')
+        endpoint_model.id = 99
+        model_model = SimpleNamespace(search=lambda *a, **k: [endpoint_model])
+
+        class DummyLang:
+            def __init__(self, _id):
+                self.id = _id
+                self.code = 'en'
+
+        pool_mock = SimpleNamespace(
+            get=lambda name: {
+                'www.uri': uri_model,
+                'ir.model': model_model,
+                'ir.lang': DummyLang,
+            }[name]
+        )
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock, \
+                patch.object(Page, '_default_uris',
+                    return_value=[{'language': 1, 'uri': '/draft/en/hello-world'}]):
+            PoolMock.return_value = pool_mock
+            Page.generate_uri([page])
+
+        self.assertTrue(written)
+        self.assertEqual(written[0][1]['uri'], '/draft/en/custom-slug')
+
+    @with_transaction()
     def test_uri_from_name_builds_expected_slug(self):
         Page = Pool().get('www.page')
         self.assertEqual(
@@ -866,32 +998,242 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn(('published', 'draft'), Page._transitions)
 
     @with_transaction()
-    def test_site_allows_only_draft_pages_in_dev(self):
+    def test_draft_moves_original_page_to_draft_before_freezing_copy(self):
+        Page = Pool().get('www.page')
+
+        class PageRecord:
+            __hash__ = object.__hash__
+
+        page = PageRecord()
+        page.id = 5
+        page.state = 'published'
+        page.__name__ = 'www.page'
+        events = []
+
+        def write_side_effect(records, values, *args):
+            events.append(('write', values.copy()))
+            if 'state' in values:
+                for record in records:
+                    record.state = values['state']
+
+        def freeze_side_effect(record):
+            events.append(('freeze', record.state))
+
+        with patch.object(Page, 'write', side_effect=write_side_effect), \
+                patch.object(Page, '_freeze_published_copy',
+                    side_effect=freeze_side_effect):
+            Page.draft([page])
+
+        self.assertEqual(events[0], ('write', {'state': 'draft'}))
+        self.assertEqual(events[1], ('freeze', 'draft'))
+
+    @with_transaction()
+    def test_draft_restores_original_published_uris_on_frozen_copy(self):
+        Page = Pool().get('www.page')
+
+        class PageRecord:
+            __hash__ = object.__hash__
+
+        page = PageRecord()
+        page.id = 5
+        page.state = 'published'
+        page.__name__ = 'www.page'
+
+        published_copy = PageRecord()
+        published_copy.id = 9
+        published_copy.state = 'published'
+        published_copy.__name__ = 'www.page'
+
+        snapshot = [{'id': 1, 'uri': '/en/custom-slug'}]
+        restored = []
+
+        def write_side_effect(records, values, *args):
+            if 'state' in values:
+                for record in records:
+                    record.state = values['state']
+
+        with patch.object(Page, '_snapshot_uris', return_value=snapshot), \
+                patch.object(Page, 'write', side_effect=write_side_effect), \
+                patch.object(Page, '_freeze_published_copy',
+                    return_value=published_copy), \
+                patch.object(Page, '_restore_uris',
+                    side_effect=lambda target, data: restored.append(
+                        (target, data))):
+            Page.draft([page])
+
+        self.assertEqual(restored, [(published_copy, snapshot)])
+
+    @with_transaction()
+    def test_restore_uris_recreates_original_links_for_published_copy(self):
+        Page = Pool().get('www.page')
+
+        class UriRecord:
+            def __init__(self, id):
+                self.id = id
+
+        created = []
+        writes = []
+        next_id = {'value': 20}
+
+        def create(values_list):
+            records = []
+            for values in values_list:
+                record = UriRecord(next_id['value'])
+                next_id['value'] += 1
+                created.append(values.copy())
+                records.append(record)
+            return records
+
+        uri_model = SimpleNamespace(
+            create=create,
+            write=lambda records, values: writes.append((records, values)),
+        )
+        pool_mock = SimpleNamespace(get=lambda name: uri_model)
+
+        page = SimpleNamespace(id=9, __name__='www.page')
+        snapshot = [
+            {
+                'id': 1,
+                'uri': '/en/custom-slug',
+                'site': 3,
+                'language': 1,
+                'endpoint': 99,
+                'main_uri': None,
+            },
+            {
+                'id': 2,
+                'uri': '/es/custom-slug',
+                'site': 3,
+                'language': 2,
+                'endpoint': 99,
+                'main_uri': 1,
+            },
+        ]
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock, \
+                patch.object(Page, '_delete_generated_uris') as delete_uris:
+            PoolMock.return_value = pool_mock
+            Page._restore_uris(page, snapshot)
+
+        delete_uris.assert_called_once_with([page])
+        self.assertEqual(created[0]['resource'], 'www.page,9')
+        self.assertEqual(created[0]['uri'], '/en/custom-slug')
+        self.assertEqual(created[1]['resource'], 'www.page,9')
+        self.assertEqual(created[1]['uri'], '/es/custom-slug')
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(writes[0][1], {'main_uri': 20})
+
+    @with_transaction()
+    def test_site_allows_all_pages_from_routes_dispatch(self):
         Site = Pool().get('www.site')
         page = SimpleNamespace(state='draft')
 
-        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
-                return_value=False):
-            self.assertTrue(Site._allow_page_state_in_environment(page))
+        self.assertTrue(Site._allow_page_state_in_environment(
+                page, '/database/web'))
 
         page.state = 'published'
-        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
-                return_value=False):
-            self.assertFalse(Site._allow_page_state_in_environment(page))
+        self.assertTrue(Site._allow_page_state_in_environment(
+                page, '/database/web'))
 
     @with_transaction()
-    def test_site_allows_only_published_pages_in_production(self):
+    def test_site_allows_only_published_pages_from_standalone_dispatch(self):
         Site = Pool().get('www.site')
         page = SimpleNamespace(state='published')
 
-        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
-                return_value=True):
-            self.assertTrue(Site._allow_page_state_in_environment(page))
+        self.assertTrue(Site._allow_page_state_in_environment(page))
 
         page.state = 'draft'
-        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
-                return_value=True):
-            self.assertFalse(Site._allow_page_state_in_environment(page))
+        self.assertFalse(Site._allow_page_state_in_environment(page))
+
+    @with_transaction()
+    def test_match_request_keeps_draft_page_from_routes_dispatch(self):
+        Site = Pool().get('www.site')
+
+        class Adapter:
+            def match(self, path, method=None):
+                raise AssertionError('adapter.match should not be used')
+
+        class EndpointModel:
+            _fields = {
+                'page': fields.Many2One('www.page', 'Page'),
+            }
+
+        site = SimpleNamespace(
+            id=1,
+            route_method='uri',
+            get_site_info=lambda web_prefix: (None, Adapter(), {}, {}),
+            _allow_page_state_in_environment=(
+                Site._allow_page_state_in_environment),
+        )
+
+        page = SimpleNamespace(id=8, state='draft', __name__='www.page')
+        voyager_uri = SimpleNamespace(
+            endpoint=SimpleNamespace(name='www.content.wrapper'),
+            resource=page,
+            language=None,
+        )
+        voyager_uri_model = SimpleNamespace(search=lambda domain, limit=None: [
+                voyager_uri])
+        pool_mock = SimpleNamespace(get=lambda name: {
+                'www.uri': voyager_uri_model,
+                'www.content.wrapper': EndpointModel,
+                }[name])
+
+        request = SimpleNamespace(path='/draft/en/test', method='GET')
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            endpoint, args, adapter, endpoint_args, language, error = (
+                Site.match_request(site, request, '/database/web'))
+
+        self.assertEqual(endpoint, 'www.content.wrapper')
+        self.assertEqual(args, {'page': 8})
+        self.assertIsInstance(adapter, Adapter)
+        self.assertEqual(endpoint_args, {})
+        self.assertIsNone(language)
+        self.assertIsNone(error)
+
+    @with_transaction()
+    def test_match_request_hides_draft_page_from_standalone_dispatch(self):
+        Site = Pool().get('www.site')
+
+        class Adapter:
+            def match(self, path, method=None):
+                return 'www.fallback', {'path': path}
+
+        site = SimpleNamespace(
+            id=1,
+            route_method='uri',
+            get_site_info=lambda web_prefix: (None, Adapter(), {}, {}),
+            _allow_page_state_in_environment=(
+                Site._allow_page_state_in_environment),
+        )
+
+        page = SimpleNamespace(id=8, state='draft', __name__='www.page')
+        voyager_uri = SimpleNamespace(
+            endpoint=SimpleNamespace(name='www.content.wrapper'),
+            resource=page,
+            language=None,
+        )
+        voyager_uri_model = SimpleNamespace(search=lambda domain, limit=None: [
+                voyager_uri])
+        pool_mock = SimpleNamespace(get=lambda name: {
+                'www.uri': voyager_uri_model,
+                }[name])
+
+        request = SimpleNamespace(path='/draft/en/test', method='GET')
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            endpoint, args, adapter, endpoint_args, language, error = (
+                Site.match_request(site, request))
+
+        self.assertEqual(endpoint, 'www.fallback')
+        self.assertEqual(args, {'path': '/draft/en/test'})
+        self.assertIsInstance(adapter, Adapter)
+        self.assertEqual(endpoint_args, {})
+        self.assertIsNone(language)
+        self.assertIsNone(error)
 
     @with_transaction()
     def test_write_state_resyncs_and_regenerates_uris(self):
