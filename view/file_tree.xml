@@ -1,0 +1,5 @@
+<tree>
+    <field name="name"/>
+    <field name="site"/>
+    <field name="uri"/>
+</tree>

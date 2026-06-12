@@ -2,19 +2,255 @@
 # The COPYRIGHT file at the top level of this repository contains
 # the full copyright notices and license terms.
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from dominate.tags import div
 from trytond.model import fields
-from trytond.modules.voyager_cms import utils as voyager_utils
+from trytond.modules.voyager_cms import cms as voyager_utils
 from trytond.pool import Pool
 from trytond.tests.test_tryton import ModuleTestCase, with_transaction
 from trytond.transaction import Transaction
+from werkzeug.wrappers import Response
 
 
 class VoyagerCmsTestCase(ModuleTestCase):
     'Test Voyager Cms module'
     module = 'voyager_cms'
+
+    @with_transaction()
+    def test_file_model_defines_expected_fields_and_button(self):
+        File = Pool().get('www.file')
+
+        self.assertEqual(File._fields['active'].__class__, fields.Boolean)
+        self.assertEqual(File._fields['download'].__class__, fields.Boolean)
+        self.assertEqual(File._fields['name'].__class__, fields.Char)
+        self.assertEqual(File._fields['file'].__class__, fields.Binary)
+        self.assertTrue(File._fields['file'].required)
+        self.assertEqual(File._fields['file'].filename, 'filename')
+        self.assertEqual(File._fields['site'].model_name, 'www.site')
+        self.assertEqual(File._fields['uri'].__class__, fields.Function)
+        self.assertEqual(File._fields['uri'].model_name, 'www.uri')
+        self.assertTrue(File._fields['uri'].readonly)
+        self.assertIn('generate_uri', File._buttons)
+
+    @with_transaction()
+    def test_site_language_fields_use_renamed_names(self):
+        Site = Pool().get('www.site')
+
+        self.assertIn('main_language', Site._fields)
+        self.assertFalse(Site._fields['main_language'].required)
+        self.assertIn('languages', Site._fields)
+        self.assertNotIn('main_lang', Site._fields)
+        self.assertNotIn('langs', Site._fields)
+
+    @with_transaction()
+    def test_file_on_change_file_uses_uploaded_filename_for_name(self):
+        File = Pool().get('www.file')
+
+        record = File()
+        record.file = b'%PDF-1.4'
+        record.filename = 'brochure.pdf'
+        record.name = None
+
+        record.on_change_file()
+
+        self.assertEqual(record.name, 'brochure.pdf')
+
+    @with_transaction()
+    def test_file_wrapper_returns_file_response(self):
+        File = Pool().get('www.file')
+        FileWrapper = Pool().get('www.file.wrapper')
+
+        file_ = File()
+        file_.file = b'hello world'
+        file_.filename = 'hello.txt'
+
+        wrapper = FileWrapper()
+        wrapper.file = file_
+
+        with patch('trytond.modules.voyager_cms.cms.magic.from_buffer',
+                return_value='text/plain'):
+            response = wrapper.render()
+
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.get_data(), b'hello world')
+        self.assertEqual(response.content_type, 'text/plain')
+        self.assertNotIn('Content-Disposition', response.headers)
+
+    @with_transaction()
+    def test_file_wrapper_returns_attachment_when_download_enabled(self):
+        File = Pool().get('www.file')
+        FileWrapper = Pool().get('www.file.wrapper')
+
+        file_ = File()
+        file_.file = b'hello world'
+        file_.filename = 'hello.txt'
+        file_.download = True
+
+        wrapper = FileWrapper()
+        wrapper.file = file_
+
+        with patch('trytond.modules.voyager_cms.cms.magic.from_buffer',
+                return_value='text/plain'):
+            response = wrapper.render()
+
+        self.assertIsInstance(response, Response)
+        self.assertEqual(response.get_data(), b'hello world')
+        self.assertEqual(response.content_type, 'text/plain')
+        self.assertEqual(
+            response.headers['Content-Disposition'],
+            'attachment; filename="hello.txt"')
+
+    @with_transaction()
+    def test_voyager_uri_resources_include_file(self):
+        URI = Pool().get('www.uri')
+        self.assertIn('www.file', URI._get_resources())
+
+    @with_transaction()
+    def test_file_get_uri_reads_www_uri_from_resource(self):
+        File = Pool().get('www.file')
+
+        file_ = SimpleNamespace(id=8)
+        uri_record = SimpleNamespace(id=17)
+        uri_model = SimpleNamespace(
+            search=lambda domain, order=None, limit=None: [uri_record],
+        )
+        pool_mock = SimpleNamespace(get=lambda name: uri_model)
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            result = File.get_uri([file_], 'uri')
+
+        self.assertEqual(result, {8: 17})
+
+    @with_transaction()
+    def test_file_generate_uri_creates_www_uri_for_file(self):
+        File = Pool().get('www.file')
+
+        class FileRecord:
+            __hash__ = object.__hash__
+
+        class UriRecord:
+            def __init__(self, id, uri, language=None):
+                self.id = id
+                self.uri = uri
+                self.language = language
+
+        class UriModel:
+            def __init__(self):
+                self._records = []
+                self._next_id = 1
+
+            def search(self, domain, order=None, limit=None):
+                records = list(self._records)
+                for field, operator, value in domain:
+                    if field == 'resource' and operator == '=':
+                        records = [
+                            record for record in records
+                            if getattr(record, 'resource', None) == value
+                        ]
+                    elif field == 'site' and operator == '=':
+                        records = [
+                            record for record in records
+                            if getattr(getattr(record, 'site', None), 'id', None) == value
+                        ]
+                    elif field == 'uri' and operator == '=':
+                        records = [
+                            record for record in records
+                            if record.uri == value
+                        ]
+                    elif field == 'id' and operator == 'not in':
+                        records = [
+                            record for record in records
+                            if record.id not in value
+                        ]
+                return records[:limit] if limit else records
+
+            def create(self, values_list):
+                created = []
+                for values in values_list:
+                    rec = UriRecord(self._next_id, values['uri'])
+                    self._next_id += 1
+                    rec.resource = values['resource']
+                    rec.site = SimpleNamespace(id=values['site'])
+                    rec.endpoint = values['endpoint']
+                    self._records.append(rec)
+                    created.append(rec)
+                return created
+
+            def write(self, uris, values):
+                for uri in uris:
+                    for key, value in values.items():
+                        setattr(uri, key, value)
+
+            def delete(self, uris):
+                for uri in uris:
+                    if uri in self._records:
+                        self._records.remove(uri)
+
+        class ModelModel:
+            def search(self, domain, limit=None):
+                return [SimpleNamespace(id=99)]
+
+        uri_model = UriModel()
+
+        file_ = FileRecord()
+        file_.__name__ = 'www.file'
+        file_.id = 8
+        file_.name = 'Brochure 2026.PDF'
+        file_.site = SimpleNamespace(id=3)
+        file_.rec_name = 'Brochure 2026.PDF'
+
+        pool_mock = SimpleNamespace()
+
+        def get_model(name):
+            if name == 'www.uri':
+                return uri_model
+            if name == 'ir.model':
+                return ModelModel()
+            raise AssertionError(name)
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            pool_mock.get = get_model
+            File.generate_uri([file_])
+
+        self.assertEqual(len(uri_model._records), 1)
+        uri, = uri_model._records
+        self.assertEqual(uri.resource, 'www.file,8')
+        self.assertEqual(uri.site.id, 3)
+        self.assertEqual(uri.uri, '/brochure-2026.pdf')
+        self.assertIsNone(uri.language)
+        self.assertEqual(uri.endpoint, 99)
+
+    @with_transaction()
+    def test_file_deactivation_deactivates_related_uri(self):
+        File = Pool().get('www.file')
+
+        file_ = SimpleNamespace(id=8)
+        uri_record = SimpleNamespace(id=17)
+        write_mock = Mock()
+        uri_model = SimpleNamespace(
+            search=lambda domain: [uri_record],
+            write=write_mock,
+        )
+        pool_mock = SimpleNamespace(get=lambda name: uri_model)
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock, \
+                patch('trytond.modules.voyager_cms.cms.super') as super_mock:
+            PoolMock.return_value = pool_mock
+            super_mock.return_value.write.return_value = None
+            File.write([file_], {'active': False})
+
+        write_mock.assert_called_once_with([uri_record], {'active': False})
+
+    @with_transaction()
+    def test_wrappers_use_www_site_type(self):
+        ContentWrapper = Pool().get('www.content.wrapper')
+        FileWrapper = Pool().get('www.file.wrapper')
+
+        self.assertEqual(ContentWrapper._type, [])
+        self.assertEqual(FileWrapper._type, [])
 
     @with_transaction()
     def test_element_kwargs_use_schema_record(self):
@@ -157,7 +393,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
             get=lambda name: DummyElementModel if name == 'test.component' else None,
         )
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value = pool_mock
             with Transaction().set_context(voyager_cms_preview=True):
                 content = Element.render_element_content(
@@ -234,7 +470,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
             def __init__(self):
                 self.menu = 'unexpected'
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value.get.return_value = FakeSchema
             preview_schema = Element._build_preview_schema()
 
@@ -256,7 +492,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         class DummyComponent(voyager_utils.ComponentCMS):
             __name__ = 'test.component'
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             pool = PoolMock.return_value
             Model = SimpleNamespace(search=lambda domain: [
                 SimpleNamespace(id=7),
@@ -299,7 +535,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
     @with_transaction()
     def test_page_default_uris_use_site_languages(self):
         Page = Pool().get('www.page')
-        site = SimpleNamespace(langs=[
+        site = SimpleNamespace(languages=[
             SimpleNamespace(code='ca'),
             SimpleNamespace(code='en'),
             SimpleNamespace(code='es'),
@@ -316,7 +552,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         pool_mock = SimpleNamespace(get=lambda name: LangModel)
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value = pool_mock
             uris = Page._default_uris('Hello World', site=site, state='draft')
 
@@ -348,7 +584,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         uri_model.delete = lambda *args, **kwargs: None
         uri_model.create = lambda *args, **kwargs: None
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value = pool_mock
             pool_mock.get = lambda name: uri_model
             with patch.object(uri_model, 'write') as write_mock:
@@ -375,7 +611,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         uri_model.search = lambda *args, **kwargs: [uri_record]
         uri_model.write = lambda *args, **kwargs: None
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value = pool_mock
             pool_mock.get = lambda name: uri_model
             with patch.object(uri_model, 'write') as write_mock:
@@ -483,7 +719,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         en = LangRecord(2, 'en')
         uri_model = UriModel()
 
-        site = SimpleNamespace(id=3, langs=[es, en])
+        site = SimpleNamespace(id=3, languages=[es, en])
         page = PageRecord()
         page.__name__ = 'www.page'
         page.id = 5
@@ -504,7 +740,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 return LangModel()
             raise AssertionError(name)
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock:
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
             PoolMock.return_value = pool_mock
             pool_mock.get = get_model
             Page.generate_uri([page])
@@ -542,7 +778,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         page.id = 5
         page.site = SimpleNamespace(
             id=3,
-            langs=[language],
+            languages=[language],
         )
         page.state = 'draft'
         page.name = 'Hello World'
@@ -590,7 +826,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
             }[name]
         )
 
-        with patch('trytond.modules.voyager_cms.utils.Pool') as PoolMock, \
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock, \
                 patch.object(Page, '_default_uris',
                     return_value=[{'language': 1, 'uri': '/draft/en/hello-world'}]):
             PoolMock.return_value = pool_mock
@@ -634,12 +870,12 @@ class VoyagerCmsTestCase(ModuleTestCase):
         Site = Pool().get('www.site')
         page = SimpleNamespace(state='draft')
 
-        with patch('trytond.modules.voyager_cms.utils.config.getboolean',
+        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
                 return_value=False):
             self.assertTrue(Site._allow_page_state_in_environment(page))
 
         page.state = 'published'
-        with patch('trytond.modules.voyager_cms.utils.config.getboolean',
+        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
                 return_value=False):
             self.assertFalse(Site._allow_page_state_in_environment(page))
 
@@ -648,12 +884,12 @@ class VoyagerCmsTestCase(ModuleTestCase):
         Site = Pool().get('www.site')
         page = SimpleNamespace(state='published')
 
-        with patch('trytond.modules.voyager_cms.utils.config.getboolean',
+        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
                 return_value=True):
             self.assertTrue(Site._allow_page_state_in_environment(page))
 
         page.state = 'draft'
-        with patch('trytond.modules.voyager_cms.utils.config.getboolean',
+        with patch('trytond.modules.voyager_cms.cms.config.getboolean',
                 return_value=True):
             self.assertFalse(Site._allow_page_state_in_environment(page))
 
@@ -663,7 +899,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         page = SimpleNamespace(id=5)
 
         with patch.object(Page, 'generate_uri') as generate_uri, \
-                patch('trytond.modules.voyager_cms.utils.super') as super_mock:
+                patch('trytond.modules.voyager_cms.cms.super') as super_mock:
             super_mock.return_value.write.return_value = None
             Page.write([page], {'state': 'published'})
 
