@@ -1,0 +1,17 @@
+<form>
+    <label name="name"/>
+    <field name="name"/>
+    <group col="-1" colspan="2" id="checkboxes" xexpand="0">
+        <label name="active"/>
+        <field name="active" xexpand="0" width="25"/>
+        <label name="download"/>
+        <field name="download" xexpand="0" width="25"/>
+    </group>
+    <label name="file"/>
+    <field name="file"/>
+    <label name="site"/>
+    <field name="site"/>
+    <label name="uri"/>
+    <field name="uri"/>
+    <button name="generate_uri" colspan="4"/>
+</form>

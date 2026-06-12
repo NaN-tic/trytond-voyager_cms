@@ -34,13 +34,57 @@ msgctxt "field:www.element,schema:"
 msgid "Schema"
 msgstr "Esquema"
 
-msgctxt "field:www.menu,component:"
+msgctxt "field:www.element,show_preview_fields:"
+msgid "Show Preview Fields"
+msgstr "Mostra els camps de previsualització"
+
+msgctxt "field:www.element,valid_models:"
+msgid "Valid Models"
+msgstr "Models vàlids"
+
+msgctxt "field:www.file,download:"
+msgid "Download"
+msgstr "Descarrega"
+
+msgctxt "field:www.file,file:"
+msgid "File"
+msgstr "Fitxer"
+
+msgctxt "field:www.file,filename:"
+msgid "Filename"
+msgstr "Nom del fitxer"
+
+msgctxt "field:www.file,name:"
+msgid "Name"
+msgstr "Nom"
+
+msgctxt "field:www.file,site:"
+msgid "Site"
+msgstr "Lloc web"
+
+msgctxt "field:www.file,uri:"
+msgid "URI"
+msgstr "URI"
+
+msgctxt "field:www.file.wrapper,file:"
+msgid "File"
+msgstr "Fitxer"
+
+msgctxt "field:www.menu,element:"
 msgid "Element"
 msgstr "Element"
+
+msgctxt "field:www.page,available_languages:"
+msgid "Available Languages"
+msgstr "Idiomes disponibles"
 
 msgctxt "field:www.page,element:"
 msgid "Elements"
 msgstr "Elements"
+
+msgctxt "field:www.page,main_uri_language:"
+msgid "Idioma"
+msgstr "Idioma"
 
 msgctxt "field:www.page,name:"
 msgid "Name"
@@ -74,23 +118,7 @@ msgctxt "field:www.page,uris:"
 msgid "URIs"
 msgstr "URIs"
 
-msgctxt "field:www.page.uri,language:"
-msgid "Idioma"
-msgstr "Idioma"
-
-msgctxt "field:www.page.uri,main_uri:"
-msgid "Main URI"
-msgstr "URI principal"
-
-msgctxt "field:www.page.uri,page:"
-msgid "Page"
-msgstr "Pàgina"
-
-msgctxt "field:www.page.uri,uri:"
-msgid "URI"
-msgstr "URI"
-
-msgctxt "field:www.schema,component:"
+msgctxt "field:www.schema,element:"
 msgid "Element"
 msgstr "Element"
 
@@ -114,13 +142,17 @@ msgctxt "field:www.site,header:"
 msgid "Header"
 msgstr "Capçalera"
 
-msgctxt "field:www.site,langs:"
+msgctxt "field:www.site,languages:"
 msgid "Languages"
-msgstr "Idioma"
+msgstr "Idiomes"
 
 msgctxt "field:www.site,layout:"
 msgid "Layout"
 msgstr "Disseny"
+
+msgctxt "field:www.site,main_language:"
+msgid "Main Language"
+msgstr "Idioma principal"
 
 msgctxt "field:www.site.lang,language:"
 msgid "Language"
@@ -130,9 +162,21 @@ msgctxt "field:www.site.lang,site:"
 msgid "Site"
 msgstr "Lloc web"
 
+msgctxt "help:www.file,download:"
+msgid ""
+"If checked, the file response is sent as an attachment and the browser will "
+"download it."
+msgstr ""
+"Si està marcat, el fitxer de resposta s'envia com a fitxer adjunt i el "
+"navegador el descarregarà."
+
 msgctxt "model:ir.action,name:act_www_component"
 msgid "Elements"
 msgstr "Elements"
+
+msgctxt "model:ir.action,name:act_www_file"
+msgid "All Files"
+msgstr "Tots els fitxers"
 
 msgctxt "model:ir.action,name:act_www_page"
 msgid "All Pages"
@@ -154,6 +198,17 @@ msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_published"
 msgid "Published"
 msgstr "Publicat"
 
+msgctxt "model:ir.message,text:msg_file_generate_uri_missing_endpoint"
+msgid "Missing file wrapper endpoint for file URI generation."
+msgstr ""
+"Falta el punt final de l'embolcall de fitxers per a la generació de l'URI "
+"del fitxer."
+
+msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
+msgid "Please set a site before generating URIs for file \"%(file)s\"."
+msgstr ""
+"Si us plau, defineu un lloc abans de generar URI per al fitxer \"%(file)s\"."
+
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
 msgid "Missing content wrapper endpoint for page URI generation."
 msgstr ""
@@ -172,6 +227,10 @@ msgstr "Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
+
+msgctxt "model:ir.model.button,string:www_file_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
 
 msgctxt "model:ir.model.button,string:www_page_draft_button"
 msgid "Draft"
@@ -193,6 +252,10 @@ msgctxt "model:ir.ui.menu,name:menu_www_component"
 msgid "Elements"
 msgstr "Elements"
 
+msgctxt "model:ir.ui.menu,name:menu_www_file"
+msgid "Files"
+msgstr "Fitxers"
+
 msgctxt "model:ir.ui.menu,name:menu_www_page"
 msgid "Pages"
 msgstr "Pàgines"
@@ -202,20 +265,24 @@ msgid "Schemas"
 msgstr "Esquemes"
 
 msgctxt "model:www.content.wrapper,string:"
-msgid "Component"
-msgstr "Component"
+msgid "Www Content Wrapper"
+msgstr "Contenidor de contingut WWW"
 
 msgctxt "model:www.element,string:"
 msgid "Www Element"
 msgstr "Element Www"
 
+msgctxt "model:www.file,string:"
+msgid "Www File"
+msgstr "Fitxer WWW"
+
+msgctxt "model:www.file.wrapper,string:"
+msgid "Www File Wrapper"
+msgstr "Contenidor de fitxers WWW"
+
 msgctxt "model:www.page,string:"
 msgid "Www Page"
 msgstr "Pàgina WWW"
-
-msgctxt "model:www.page.uri,string:"
-msgid "Www Page Uri"
-msgstr "Uri de la pàgina www"
 
 msgctxt "model:www.schema,string:"
 msgid "Www Schema"

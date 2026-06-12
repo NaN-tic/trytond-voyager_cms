@@ -1,14 +1,18 @@
 from datetime import date
 from xml.sax.saxutils import escape
 
+import magic
 from dominate.tags import div
 from dominate.util import raw
 from werkzeug.exceptions import HTTPException
+from werkzeug.wrappers import Response
 from trytond.config import config
 from trytond.exceptions import UserError
 from trytond.i18n import gettext as _
 
-from trytond.model import ModelSQL, ModelView, Workflow, fields, sequence_ordered
+from trytond.model import (
+    DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
+    sequence_ordered)
 from trytond.pool import Pool, PoolMeta
 from trytond.i18n import gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
@@ -138,6 +142,144 @@ def _get_voyager_context(site=None):
     values['site'] = site or getattr(current, 'site', None)
     return VoyagerContext(**values)
 
+
+class File(DeactivableMixin, ModelSQL, ModelView):
+    __name__ = 'www.file'
+
+    name = fields.Char('Name', required=True, translate=True)
+    download = fields.Boolean('Download',
+        help='If checked, the file response is sent as an attachment and the'
+        ' browser will download it.')
+    file = fields.Binary('File', required=True, filename='filename')
+    filename = fields.Char('Filename')
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
+    uri = fields.Function(
+        fields.Many2One('www.uri', 'URI', readonly=True),
+        'get_uri')
+
+    @fields.depends('file', 'filename')
+    def on_change_file(self):
+        if self.filename:
+            self.name = self.filename
+
+    @fields.depends('file', 'filename')
+    def on_change_filename(self):
+        self.on_change_file()
+
+    @classmethod
+    def get_uri(cls, files, name):
+        pool = Pool()
+        URI = pool.get('www.uri')
+        result = {}
+        for file_ in files:
+            file_id = getattr(file_, 'id', None)
+            if not file_id:
+                result[file_id] = None
+                continue
+            resource_ref = f'{cls.__name__},{file_id}'
+            uris = URI.search([
+                    ('resource', '=', resource_ref),
+                ], order=[('id', 'ASC')], limit=1)
+            result[file_id] = uris[0].id if uris else None
+        return result
+
+    @classmethod
+    def _uri_from_name(cls, name):
+        if not name:
+            return None
+        base = name.lower().replace('/', '-').replace('\\', '-')
+        base = '-'.join(base.split())
+        if not base:
+            return None
+        return f'/{base}'
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls._buttons.update({
+            'generate_uri': {},
+        })
+
+    @classmethod
+    def write(cls, files, values, *args):
+        values = values.copy()
+        super().write(files, values, *args)
+        if 'active' in values and not values['active']:
+            pool = Pool()
+            URI = pool.get('www.uri')
+            uris = []
+            for file_ in files:
+                file_id = getattr(file_, 'id', None)
+                if not file_id:
+                    continue
+                resource_ref = f'{cls.__name__},{file_id}'
+                uris.extend(URI.search([
+                            ('resource', '=', resource_ref),
+                        ]))
+            if uris:
+                URI.write(uris, {'active': False})
+
+    @classmethod
+    @ModelView.button
+    def generate_uri(cls, files):
+        pool = Pool()
+        URI = pool.get('www.uri')
+        Model = pool.get('ir.model')
+
+        endpoint_model = Model.search(
+            [('name', '=', 'www.file.wrapper')],
+            limit=1
+        )
+        if not endpoint_model:
+            raise UserError(
+                gettext('voyager_cms.msg_file_generate_uri_missing_endpoint')
+            )
+
+        endpoint = endpoint_model[0]
+
+        for file_ in files:
+            if not file_.site:
+                raise UserError(
+                    gettext('voyager_cms.msg_file_generate_uri_missing_site',
+                        file=file_.rec_name)
+                )
+
+            uri_value = cls._uri_from_name(file_.name)
+            if not uri_value:
+                continue
+
+            resource_ref = f'{file_.__name__},{file_.id}'
+            existing_uris = URI.search([
+                    ('resource', '=', resource_ref),
+                    ('site', '=', file_.site.id),
+                ], order=[('id', 'ASC')])
+            uri = existing_uris[0] if existing_uris else None
+
+            values = {
+                'resource': resource_ref,
+                'site': file_.site.id,
+                'uri': uri_value,
+                'endpoint': endpoint.id,
+                }
+
+            if uri is None:
+                uri = URI.create([values])[0]
+            else:
+                URI.write([uri], values)
+
+            if existing_uris[1:]:
+                URI.delete(existing_uris[1:])
+
+            duplicates = URI.search([
+                    ('site', '=', file_.site.id),
+                    ('uri', '=', uri.uri),
+                    ('id', 'not in', [uri.id]),
+                ], limit=20)
+            if duplicates:
+                URI.delete(duplicates)
+
+
 class Page(Workflow, ModelSQL, ModelView):
     __name__ = 'www.page'
 
@@ -215,8 +357,8 @@ class Page(Workflow, ModelSQL, ModelView):
         if self.main_uri_language and self.main_uri_language.id in (
                 self.available_languages or []):
             return
-        if self.site and self.site.main_lang:
-            self.main_uri_language = self.site.main_lang
+        if self.site and self.site.main_language:
+            self.main_uri_language = self.site.main_language
         else:
             self.main_uri_language = None
 
@@ -401,9 +543,9 @@ class Page(Workflow, ModelSQL, ModelView):
     def _site_lang_codes(cls, site):
         pool = Pool()
         langs = []
-        if getattr(site, 'langs', None):
+        if getattr(site, 'languages', None):
             langs = [
-                lang.code for lang in site.langs
+                lang.code for lang in site.languages
                 if getattr(lang, 'code', None)
             ]
         elif hasattr(site, 'id') and site.id:
@@ -1160,7 +1302,6 @@ class Schema(ModelSQL, ModelView):
 class ContentWrapper(Endpoint):
     __name__ = 'www.content.wrapper'
     _url = '/content-wrapper'
-    #TODO: what we do with the type??
     _type = []
     page = fields.Many2One('www.page', 'Page')
 
@@ -1237,12 +1378,35 @@ class ContentWrapper(Endpoint):
         return _render_layout(content=page_content, title=self.page.name)
 
 
+class FileWrapper(Endpoint):
+    __name__ = 'www.file.wrapper'
+    _url = '/file-wrapper'
+    _type = []
+    file = fields.Many2One('www.file', 'File')
+
+    def render(self):
+        if not self.file or not self.file.file:
+            return Response('File not found', status=404,
+                content_type='text/plain')
+        mime_type = magic.from_buffer(bytes(self.file.file), mime=True)
+        response = Response(
+            self.file.file,
+            content_type=mime_type or 'application/octet-stream')
+        if getattr(self.file, 'download', False):
+            if getattr(self.file, 'filename', None):
+                response.headers['Content-Disposition'] = (
+                    f'attachment; filename="{self.file.filename}"')
+            else:
+                response.headers['Content-Disposition'] = 'attachment'
+        return response
+
+
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
     @classmethod
     def _get_resources(cls):
-        return super()._get_resources() + ['www.page']
+        return super()._get_resources() + ['www.page', 'www.file']
 
 
 class VoyagerMenu(metaclass=PoolMeta):
@@ -1276,8 +1440,9 @@ class VoyagerSite(metaclass=PoolMeta):
     header = fields.Many2One('www.element', 'Header', ondelete='SET NULL')
     footer = fields.Many2One('www.element', 'Footer', ondelete='SET NULL')
     layout = fields.Many2One('www.element', 'Layout', ondelete='SET NULL')
-    main_lang = fields.Many2One('ir.lang', 'Main Language', required=True)
-    langs = fields.Many2Many('www.site.lang', 'site', 'language', 'Languages')
+    main_language = fields.Many2One('ir.lang', 'Main Language')
+    languages = fields.Many2Many(
+        'www.site.lang', 'site', 'language', 'Languages')
 
     @staticmethod
     def _allow_page_state_in_environment(page):
