@@ -25,7 +25,10 @@ CHILD_PAGE_STATES = {
     'readonly': Bool(Eval('page')) & (Eval('_parent_page', {}).get('state') != 'draft')
 }
 CHILD_PAGE_DEPENDS = ['page', '_parent_page.state']
-
+SCHEMA_STATES = {
+    'readonly': Bool(Eval('page_state')) & (Eval('page_state') != 'draft')
+}
+SCHEMA_DEPENDS = ['page_state']
 
 class _LayoutRenderProxy:
     __slots__ = ('_layout', 'content', 'title')
@@ -947,7 +950,7 @@ class Element(sequence_ordered(), ModelSQL, ModelView):
         'on_change_with_page_state')
     schema = fields.One2Many('www.schema', 'element', "Schema",
         size=1, add_remove=[('element', '=', None)],
-        states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
+        states=SCHEMA_STATES, depends=SCHEMA_DEPENDS)
     show_preview_fields = fields.Boolean(
         'Show Preview Fields',
         states=CHILD_PAGE_STATES, depends=CHILD_PAGE_DEPENDS)
