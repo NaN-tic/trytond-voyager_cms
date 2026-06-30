@@ -34,6 +34,133 @@ this repository contains the full copyright notices and license terms. -->
             <field name="model">www.file</field>
         </record>
 
+        <!-- www.article -->
+        <record model="ir.ui.view" id="www_article_view_tree">
+            <field name="model">www.article</field>
+            <field name="type">tree</field>
+            <field name="name">article_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_article_view_form">
+            <field name="model">www.article</field>
+            <field name="type">form</field>
+            <field name="name">article_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_article">
+            <field name="name">Articles</field>
+            <field name="res_model">www.article</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_article_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_article_view_tree"/>
+            <field name="act_window" ref="act_www_article"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_article_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_article_view_form"/>
+            <field name="act_window" ref="act_www_article"/>
+        </record>
+
+        <!-- www.article.category -->
+        <record model="ir.ui.view" id="www_article_category_view_tree">
+            <field name="model">www.article.category</field>
+            <field name="type">tree</field>
+            <field name="field_childs">childs</field>
+            <field name="name">article_category_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_article_category_view_form">
+            <field name="model">www.article.category</field>
+            <field name="type">form</field>
+            <field name="name">article_category_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_article_category">
+            <field name="name">Article Categories</field>
+            <field name="res_model">www.article.category</field>
+            <field name="domain" eval="[('parent', '=', None)]" pyson="1"/>
+        </record>
+        <record model="ir.action.act_window.view"
+            id="act_www_article_category_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_article_category_view_tree"/>
+            <field name="act_window" ref="act_www_article_category"/>
+        </record>
+        <record model="ir.action.act_window.view"
+            id="act_www_article_category_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_article_category_view_form"/>
+            <field name="act_window" ref="act_www_article_category"/>
+        </record>
+
+        <!-- www.comment -->
+        <record model="ir.ui.view" id="www_comment_view_tree">
+            <field name="model">www.comment</field>
+            <field name="type">tree</field>
+            <field name="name">comment_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_comment_view_form">
+            <field name="model">www.comment</field>
+            <field name="type">form</field>
+            <field name="name">comment_form</field>
+        </record>
+        <record model="ir.action.act_window" id="act_www_comment">
+            <field name="name">Comments</field>
+            <field name="res_model">www.comment</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_comment_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_comment_view_tree"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_comment_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_comment_view_form"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_comment_domain_draft">
+            <field name="name">Draft</field>
+            <field name="sequence" eval="10"/>
+            <field name="domain" eval="[('state', '=', 'draft')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_comment_domain_approved">
+            <field name="name">Approved</field>
+            <field name="sequence" eval="20"/>
+            <field name="domain" eval="[('state', '=', 'approved')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_comment_domain_not_approved">
+            <field name="name">Not Approved</field>
+            <field name="sequence" eval="30"/>
+            <field name="domain" eval="[('state', '=', 'not_approved')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_comment_domain_all">
+            <field name="name">All</field>
+            <field name="sequence" eval="9999"/>
+            <field name="act_window" ref="act_www_comment"/>
+        </record>
+        <record model="ir.model.button" id="www_comment_approve_button">
+            <field name="name">approve</field>
+            <field name="string">Approved</field>
+            <field name="model">www.comment</field>
+        </record>
+        <record model="ir.model.button" id="www_comment_not_approve_button">
+            <field name="name">not_approve</field>
+            <field name="string">Not Approved</field>
+            <field name="model">www.comment</field>
+        </record>
+        <record model="ir.model.button" id="www_comment_draft_button">
+            <field name="name">draft</field>
+            <field name="string">Draft</field>
+            <field name="model">www.comment</field>
+        </record>
+
         <!-- www.page -->
         <record model="ir.ui.view" id="www_page_view_tree">
             <field name="model">www.page</field>
@@ -180,6 +307,14 @@ this repository contains the full copyright notices and license terms. -->
         <menuitem id="menu_voyager_cms" name="Voyager CMS" sequence="210"/>
         <menuitem parent="menu_voyager_cms" action="act_www_file"
             name="Files" id="menu_www_file" sequence="5"/>
+        <menuitem parent="menu_voyager_cms" name="Article"
+            id="menu_www_article_folder" sequence="7"/>
+        <menuitem parent="menu_www_article_folder" action="act_www_article"
+            name="Articles" id="menu_www_article" sequence="5"/>
+        <menuitem parent="menu_www_article_folder" action="act_www_article_category"
+            name="Article Categories" id="menu_www_article_category" sequence="10"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_comment"
+            name="Comments" id="menu_www_comment" sequence="9"/>
         <menuitem parent="menu_voyager_cms" action="act_www_page"
             name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>

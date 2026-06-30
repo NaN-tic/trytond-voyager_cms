@@ -34,6 +34,59 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertIn('generate_uri', File._buttons)
 
     @with_transaction()
+    def test_article_model_defines_expected_fields(self):
+        Article = Pool().get('www.article')
+
+        self.assertEqual(Article._fields['title'].__class__, fields.Char)
+        self.assertTrue(Article._fields['title'].required)
+        self.assertTrue(Article._fields['title'].translate)
+        self.assertEqual(Article._fields['site'].model_name, 'www.site')
+        self.assertEqual(Article._fields['category'].model_name, 'www.article.category')
+        self.assertEqual(Article._fields['text'].__class__, fields.Text)
+        self.assertTrue(Article._fields['text'].translate)
+        self.assertEqual(Article._fields['image'].model_name, 'www.file')
+        self.assertEqual(Article._fields['uris'].__class__, fields.Function)
+        self.assertEqual(Article._fields['uris'].model_name, 'www.uri')
+        self.assertEqual(Article._fields['comments'].__class__, fields.Function)
+        self.assertEqual(Article._fields['comments'].model_name, 'www.comment')
+
+    @with_transaction()
+    def test_article_category_model_defines_expected_fields(self):
+        ArticleCategory = Pool().get('www.article.category')
+
+        self.assertEqual(ArticleCategory._fields['name'].__class__, fields.Char)
+        self.assertTrue(ArticleCategory._fields['name'].required)
+        self.assertTrue(ArticleCategory._fields['name'].translate)
+        self.assertEqual(ArticleCategory._fields['parent'].model_name, 'www.article.category')
+        self.assertEqual(ArticleCategory._fields['childs'].model_name, 'www.article.category')
+
+    @with_transaction()
+    def test_comment_model_defines_expected_fields_and_buttons(self):
+        Comment = Pool().get('www.comment')
+
+        self.assertEqual(Comment._fields['origin'].__class__, fields.Reference)
+        self.assertTrue(Comment._fields['origin'].required)
+        self.assertEqual(Comment._fields['text'].__class__, fields.Text)
+        self.assertTrue(Comment._fields['text'].required)
+        self.assertEqual(Comment._fields['user'].model_name, 'web.user')
+        self.assertEqual(Comment._fields['in_reply_to'].model_name, 'www.comment')
+        self.assertEqual(
+            Comment._fields['origin'].states,
+            {'readonly': voyager_utils.Eval('state') != 'draft'})
+        self.assertEqual(
+            Comment._fields['text'].states,
+            {'readonly': voyager_utils.Eval('state') != 'draft'})
+        self.assertEqual(
+            Comment._fields['user'].states,
+            {'readonly': voyager_utils.Eval('state') != 'draft'})
+        self.assertEqual(Comment.default_state(), 'draft')
+        self.assertIn('www.article',
+            [model for model, _label in Comment.get_resources()])
+        self.assertIn('approve', Comment._buttons)
+        self.assertIn('not_approve', Comment._buttons)
+        self.assertIn('draft', Comment._buttons)
+
+    @with_transaction()
     def test_site_language_fields_use_renamed_names(self):
         Site = Pool().get('www.site')
 

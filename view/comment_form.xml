@@ -1,0 +1,17 @@
+<form>
+    <label name="origin"/>
+    <field name="origin"/>
+    <label name="user"/>
+    <field name="user"/>
+    <label name="in_reply_to"/>
+    <field name="in_reply_to"/>
+    <separator name="text" colspan="4"/>
+    <field name="text" colspan="4"/>
+    <label name="state"/>
+    <field name="state"/>
+    <group col="-1" colspan="2" id="buttons">
+        <button name="approve"/>
+        <button name="not_approve"/>
+        <button name="draft"/>
+    </group>
+</form>
