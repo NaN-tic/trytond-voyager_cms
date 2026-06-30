@@ -11,7 +11,7 @@ from trytond.i18n import gettext as _
 
 from trytond.model import (
     DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
-    sequence_ordered)
+    sequence_ordered, tree)
 from trytond.pool import Pool, PoolMeta
 from trytond.i18n import gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
@@ -29,6 +29,8 @@ SCHEMA_STATES = {
     'readonly': Bool(Eval('page_state')) & (Eval('page_state') != 'draft')
 }
 SCHEMA_DEPENDS = ['page_state']
+COMMENT_STATES = {'readonly': Eval('state') != 'draft'}
+COMMENT_DEPENDS = ['state']
 
 class _LayoutRenderProxy:
     __slots__ = ('_layout', 'content', 'title')
@@ -280,6 +282,143 @@ class File(DeactivableMixin, ModelSQL, ModelView):
                 ], limit=20)
             if duplicates:
                 URI.delete(duplicates)
+
+
+class Article(ModelSQL, ModelView):
+    __name__ = 'www.article'
+
+    title = fields.Char('Title', required=True, translate=True)
+    site = fields.Many2One('www.site', 'Site', required=True,
+        ondelete='CASCADE')
+    category = fields.Many2One('www.article.category', 'Category',
+        ondelete='SET NULL')
+    text = fields.Text('Text', translate=True)
+    image = fields.Many2One('www.file', 'Image', ondelete='SET NULL')
+    uris = fields.Function(fields.One2Many('www.uri', None, 'URIs'),
+        'get_uris', setter='set_uris')
+    comments = fields.Function(fields.One2Many('www.comment', None, 'Comments'),
+        'get_comments', setter='set_comments')
+
+    def get_uris(self, name):
+        if not self.id:
+            return []
+        URI = Pool().get('www.uri')
+        resource = f'{self.__name__},{self.id}'
+        return [uri.id for uri in URI.search([
+                    ('resource', '=', resource),
+                ], order=[('id', 'ASC')])]
+
+    @classmethod
+    def set_uris(cls, articles, name, value):
+        # Prevent NotImplementedError for the function One2Many field.
+        pass
+
+    def get_comments(self, name):
+        if not self.id:
+            return []
+        Comment = Pool().get('www.comment')
+        origin = f'{self.__name__},{self.id}'
+        return [comment.id for comment in Comment.search([
+                    ('origin', '=', origin),
+                ])]
+
+    @classmethod
+    def set_comments(cls, articles, name, value):
+        # Prevent NotImplementedError for the function One2Many field.
+        pass
+
+
+class ArticleCategory(tree(separator=' / '), ModelSQL, ModelView):
+    __name__ = 'www.article.category'
+
+    name = fields.Char('Name', required=True, translate=True)
+    parent = fields.Many2One('www.article.category', 'Parent',
+        ondelete='SET NULL')
+    childs = fields.One2Many('www.article.category', 'parent', 'Childs')
+
+
+class Comment(Workflow, ModelSQL, ModelView):
+    __name__ = 'www.comment'
+
+    origin = fields.Reference('Origin', selection='get_resources',
+        required=True, states=COMMENT_STATES, depends=COMMENT_DEPENDS)
+    text = fields.Text('Text', required=True,
+        states=COMMENT_STATES, depends=COMMENT_DEPENDS)
+    user = fields.Many2One('web.user', 'User', ondelete='SET NULL',
+        states=COMMENT_STATES, depends=COMMENT_DEPENDS)
+    in_reply_to = fields.Many2One('www.comment', 'In Reply To',
+        domain=[
+            ('origin', '=', Eval('origin', -1)),
+            ],
+        depends=['origin'] + COMMENT_DEPENDS, ondelete='SET NULL',
+        states=COMMENT_STATES)
+    state = fields.Selection([
+            ('draft', 'Draft'),
+            ('approved', 'Approved'),
+            ('not_approved', 'Not Approved'),
+            ], 'State', readonly=True, required=True, sort=False)
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls._transitions |= set((
+                ('draft', 'approved'),
+                ('draft', 'not_approved'),
+                ('approved', 'draft'),
+                ('not_approved', 'draft'),
+                ))
+        cls._buttons.update({
+            'approve': {
+                'invisible': Eval('state') != 'draft',
+                'depends': ['state'],
+                'icon': 'tryton-forward',
+                },
+            'not_approve': {
+                'invisible': Eval('state') != 'draft',
+                'depends': ['state'],
+                'icon': 'tryton-cancel',
+                },
+            'draft': {
+                'invisible': Eval('state') == 'draft',
+                'depends': ['state'],
+                'icon': 'tryton-back',
+                },
+        })
+
+    @staticmethod
+    def default_state():
+        return 'draft'
+
+    @classmethod
+    def _get_resources(cls):
+        return ['www.article']
+
+    @classmethod
+    def get_resources(cls):
+        Model = Pool().get('ir.model')
+        models = Model.search([('name', 'in', cls._get_resources())])
+        return [(None, '')] + [
+            (model.name, model.string)
+            for model in models
+        ]
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('approved')
+    def approve(cls, comments):
+        pass
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('not_approved')
+    def not_approve(cls, comments):
+        pass
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('draft')
+    def draft(cls, comments):
+        pass
 
 
 class Page(Workflow, ModelSQL, ModelView):

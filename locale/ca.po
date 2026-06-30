@@ -2,6 +2,62 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+msgctxt "field:www.article,category:"
+msgid "Category"
+msgstr "Categoria"
+
+msgctxt "field:www.article,comments:"
+msgid "Comments"
+msgstr "Comentaris"
+
+msgctxt "field:www.article,image:"
+msgid "Image"
+msgstr "Imatge"
+
+msgctxt "field:www.article,site:"
+msgid "Site"
+msgstr "Lloc web"
+
+msgctxt "field:www.article,text:"
+msgid "Text"
+msgstr "Text"
+
+msgctxt "field:www.article,title:"
+msgid "Title"
+msgstr "Títol"
+
+msgctxt "field:www.article.category,childs:"
+msgid "Childs"
+msgstr "Fills"
+
+msgctxt "field:www.article.category,name:"
+msgid "Name"
+msgstr "Nom"
+
+msgctxt "field:www.article.category,parent:"
+msgid "Parent"
+msgstr "Pare"
+
+msgctxt "field:www.comment,in_reply_to:"
+msgid "In Reply To"
+msgstr "En resposta a"
+
+msgctxt "field:www.comment,origin:"
+msgid "Origin"
+msgstr "Origen"
+
+msgctxt "field:www.comment,state:"
+msgid "State"
+msgstr "Estat"
+
+msgctxt "field:www.comment,text:"
+msgid "Text"
+msgstr "Text"
+
+msgctxt "field:www.comment,user:"
+msgid "User"
+msgstr "Usuari"
+
 msgctxt "field:www.content.wrapper,page:"
 msgid "Page"
 msgstr "Pàgina"
@@ -170,6 +226,18 @@ msgstr ""
 "Si està marcat, el fitxer de resposta s'envia com a fitxer adjunt i el "
 "navegador el descarregarà."
 
+msgctxt "model:ir.action,name:act_www_article"
+msgid "Articles"
+msgstr "Articles"
+
+msgctxt "model:ir.action,name:act_www_article_category"
+msgid "Article Categories"
+msgstr "Categories d'articles"
+
+msgctxt "model:ir.action,name:act_www_comment"
+msgid "Comments"
+msgstr "Comentaris"
+
 msgctxt "model:ir.action,name:act_www_component"
 msgid "Elements"
 msgstr "Elements"
@@ -185,6 +253,24 @@ msgstr "Totes les pàgines"
 msgctxt "model:ir.action,name:act_www_schema"
 msgid "Schemas"
 msgstr "Esquemes"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_all"
+msgid "All"
+msgstr "Tot"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_comment_domain_approved"
+msgid "Approved"
+msgstr "Aprovat"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_draft"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_comment_domain_not_approved"
+msgid "Not Approved"
+msgstr "No aprovat"
 
 msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_all"
 msgid "All"
@@ -228,6 +314,18 @@ msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
 
+msgctxt "model:ir.model.button,string:www_comment_approve_button"
+msgid "Approved"
+msgstr "Aprovat"
+
+msgctxt "model:ir.model.button,string:www_comment_draft_button"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "model:ir.model.button,string:www_comment_not_approve_button"
+msgid "Not Approved"
+msgstr "No aprovat"
+
 msgctxt "model:ir.model.button,string:www_file_generate_uri_button"
 msgid "Generate URI"
 msgstr "Generar URI"
@@ -248,6 +346,22 @@ msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
 msgid "Voyager CMS"
 msgstr "Voyager CMS"
 
+msgctxt "model:ir.ui.menu,name:menu_www_article"
+msgid "Articles"
+msgstr "Articles"
+
+msgctxt "model:ir.ui.menu,name:menu_www_article_category"
+msgid "Article Categories"
+msgstr "Categories d'articles"
+
+msgctxt "model:ir.ui.menu,name:menu_www_article_folder"
+msgid "Article"
+msgstr "Article"
+
+msgctxt "model:ir.ui.menu,name:menu_www_comment"
+msgid "Comments"
+msgstr "Comentaris"
+
 msgctxt "model:ir.ui.menu,name:menu_www_component"
 msgid "Elements"
 msgstr "Elements"
@@ -263,6 +377,18 @@ msgstr "Pàgines"
 msgctxt "model:ir.ui.menu,name:menu_www_schema"
 msgid "Schemas"
 msgstr "Esquemes"
+
+msgctxt "model:www.article,string:"
+msgid "Www Article"
+msgstr "Article WWW"
+
+msgctxt "model:www.article.category,string:"
+msgid "Www Article Category"
+msgstr "Categoria d'articles WWW"
+
+msgctxt "model:www.comment,string:"
+msgid "Www Comment"
+msgstr "Comentari WWW"
 
 msgctxt "model:www.content.wrapper,string:"
 msgid "Www Content Wrapper"
@@ -292,6 +418,18 @@ msgctxt "model:www.site.lang,string:"
 msgid "Www Site Lang"
 msgstr "Idioma del lloc web www"
 
+msgctxt "selection:www.comment,state:"
+msgid "Approved"
+msgstr "Aprovat"
+
+msgctxt "selection:www.comment,state:"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "selection:www.comment,state:"
+msgid "Not Approved"
+msgstr "No aprovat"
+
 msgctxt "selection:www.menu,type:"
 msgid "Element"
 msgstr "Element"
@@ -303,6 +441,14 @@ msgstr "Esborrany"
 msgctxt "selection:www.page,state:"
 msgid "Published"
 msgstr "Publicat"
+
+msgctxt "view:www.article:"
+msgid "Comments"
+msgstr "Comentaris"
+
+msgctxt "view:www.article:"
+msgid "Text"
+msgstr "Text"
 
 msgctxt "view:www.element:"
 msgid "Preview"
