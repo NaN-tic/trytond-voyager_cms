@@ -7,6 +7,9 @@ from . import cms
 def register():
     Pool.register(
         cms.File,
+        cms.Article,
+        cms.ArticleCategory,
+        cms.Comment,
         cms.Page,
         cms.Element,
         cms.Schema,

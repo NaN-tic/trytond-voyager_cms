@@ -1,0 +1,6 @@
+<tree>
+    <field name="origin"/>
+    <field name="user"/>
+    <field name="in_reply_to"/>
+    <field name="state"/>
+</tree>

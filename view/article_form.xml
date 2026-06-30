@@ -1,0 +1,21 @@
+<form>
+    <label name="title"/>
+    <field name="title"/>
+    <label name="site"/>
+    <field name="site"/>
+    <label name="category"/>
+    <field name="category"/>
+    <label name="image"/>
+    <field name="image"/>
+    <notebook colspan="4">
+        <page string="Text" id="text">
+            <field name="text" colspan="4"/>
+        </page>
+        <page string="Uris" id="uris">
+            <field name="uris" colspan="4" mode="tree,form" height="250"/>
+        </page>
+        <page string="Comments" id="comments">
+            <field name="comments" colspan="4" mode="tree,form" height="300"/>
+        </page>
+    </notebook>
+</form>

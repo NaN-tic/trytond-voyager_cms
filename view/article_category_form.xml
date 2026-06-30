@@ -1,0 +1,7 @@
+<form>
+    <label name="name"/>
+    <field name="name"/>
+    <label name="parent"/>
+    <field name="parent"/>
+    <field name="childs" colspan="4" mode="tree,form" height="250"/>
+</form>

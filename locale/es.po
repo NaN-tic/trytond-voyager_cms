@@ -2,6 +2,62 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+msgctxt "field:www.article,category:"
+msgid "Category"
+msgstr "Categoría"
+
+msgctxt "field:www.article,comments:"
+msgid "Comments"
+msgstr "Comentarios"
+
+msgctxt "field:www.article,image:"
+msgid "Image"
+msgstr "Imagen"
+
+msgctxt "field:www.article,site:"
+msgid "Site"
+msgstr "Sitio"
+
+msgctxt "field:www.article,text:"
+msgid "Text"
+msgstr "Texto"
+
+msgctxt "field:www.article,title:"
+msgid "Title"
+msgstr "Título"
+
+msgctxt "field:www.article.category,childs:"
+msgid "Childs"
+msgstr "Hijos"
+
+msgctxt "field:www.article.category,name:"
+msgid "Name"
+msgstr "Nombre"
+
+msgctxt "field:www.article.category,parent:"
+msgid "Parent"
+msgstr "Padre"
+
+msgctxt "field:www.comment,in_reply_to:"
+msgid "In Reply To"
+msgstr "En respuesta a"
+
+msgctxt "field:www.comment,origin:"
+msgid "Origin"
+msgstr "Origen"
+
+msgctxt "field:www.comment,state:"
+msgid "State"
+msgstr "Estado"
+
+msgctxt "field:www.comment,text:"
+msgid "Text"
+msgstr "Texto"
+
+msgctxt "field:www.comment,user:"
+msgid "User"
+msgstr "Usuario"
+
 msgctxt "field:www.content.wrapper,page:"
 msgid "Page"
 msgstr "Página"
@@ -170,6 +226,18 @@ msgstr ""
 "Si está marcada esta opción, la respuesta del archivo se envía como un "
 "archivo adjunto y el navegador lo descargará."
 
+msgctxt "model:ir.action,name:act_www_article"
+msgid "Articles"
+msgstr "Artículos"
+
+msgctxt "model:ir.action,name:act_www_article_category"
+msgid "Article Categories"
+msgstr "Categorías de artículos"
+
+msgctxt "model:ir.action,name:act_www_comment"
+msgid "Comments"
+msgstr "Comentarios"
+
 msgctxt "model:ir.action,name:act_www_component"
 msgid "Elements"
 msgstr "Elementos"
@@ -185,6 +253,24 @@ msgstr "Todas las páginas"
 msgctxt "model:ir.action,name:act_www_schema"
 msgid "Schemas"
 msgstr "Esquemas"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_all"
+msgid "All"
+msgstr "Todo"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_comment_domain_approved"
+msgid "Approved"
+msgstr "Aprobado"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_draft"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_comment_domain_not_approved"
+msgid "Not Approved"
+msgstr "No aprobado"
 
 msgctxt "model:ir.action.act_window.domain,name:act_www_page_domain_all"
 msgid "All"
@@ -230,6 +316,18 @@ msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."
 
+msgctxt "model:ir.model.button,string:www_comment_approve_button"
+msgid "Approved"
+msgstr "Aprobado"
+
+msgctxt "model:ir.model.button,string:www_comment_draft_button"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "model:ir.model.button,string:www_comment_not_approve_button"
+msgid "Not Approved"
+msgstr "No aprobado"
+
 msgctxt "model:ir.model.button,string:www_file_generate_uri_button"
 msgid "Generate URI"
 msgstr "Generar URI"
@@ -250,6 +348,22 @@ msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
 msgid "Voyager CMS"
 msgstr "Voyager CMS"
 
+msgctxt "model:ir.ui.menu,name:menu_www_article"
+msgid "Articles"
+msgstr "Artículos"
+
+msgctxt "model:ir.ui.menu,name:menu_www_article_category"
+msgid "Article Categories"
+msgstr "Categorías de artículos"
+
+msgctxt "model:ir.ui.menu,name:menu_www_article_folder"
+msgid "Article"
+msgstr "Artículo"
+
+msgctxt "model:ir.ui.menu,name:menu_www_comment"
+msgid "Comments"
+msgstr "Comentarios"
+
 msgctxt "model:ir.ui.menu,name:menu_www_component"
 msgid "Elements"
 msgstr "Elementos"
@@ -265,6 +379,18 @@ msgstr "Páginas"
 msgctxt "model:ir.ui.menu,name:menu_www_schema"
 msgid "Schemas"
 msgstr "Esquemas"
+
+msgctxt "model:www.article,string:"
+msgid "Www Article"
+msgstr "Artículo WWW"
+
+msgctxt "model:www.article.category,string:"
+msgid "Www Article Category"
+msgstr "Categoría de artículo WWW"
+
+msgctxt "model:www.comment,string:"
+msgid "Www Comment"
+msgstr "Comentario WWW"
 
 msgctxt "model:www.content.wrapper,string:"
 msgid "Www Content Wrapper"
@@ -294,6 +420,18 @@ msgctxt "model:www.site.lang,string:"
 msgid "Www Site Lang"
 msgstr "Idioma sitio web"
 
+msgctxt "selection:www.comment,state:"
+msgid "Approved"
+msgstr "Aprobado"
+
+msgctxt "selection:www.comment,state:"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "selection:www.comment,state:"
+msgid "Not Approved"
+msgstr "No aprobado"
+
 msgctxt "selection:www.menu,type:"
 msgid "Element"
 msgstr "Elemento"
@@ -305,6 +443,14 @@ msgstr "Borrador"
 msgctxt "selection:www.page,state:"
 msgid "Published"
 msgstr "Publicado"
+
+msgctxt "view:www.article:"
+msgid "Comments"
+msgstr "Comentarios"
+
+msgctxt "view:www.article:"
+msgid "Text"
+msgstr "Texto"
 
 msgctxt "view:www.element:"
 msgid "Preview"
