@@ -451,6 +451,19 @@ class Page(Workflow, ModelSQL, ModelView):
         fields.One2Many('www.uri', None, 'URIs',
             states=PAGE_STATES, depends=PAGE_DEPENDS),
         'get_uris', setter='set_uris')
+    seo_title = fields.Char('SEO Title', translate=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    seo_description = fields.Text('SEO Description', translate=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    seo_keywords = fields.Char('SEO Keywords', translate=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    seo_og_title = fields.Char('Open Graph Title', translate=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    seo_og_description = fields.Text('Open Graph Description', translate=True,
+        states=PAGE_STATES, depends=PAGE_DEPENDS)
+    seo_og_image_file = fields.Many2One('www.file', 'Open Graph Image',
+        domain=[('site', '=', Eval('site'))],
+        states=PAGE_STATES, depends=PAGE_DEPENDS + ['site'])
     element = fields.One2Many(
         'www.element', 'page', 'Elements',
         order=[('sequence', 'ASC')],
