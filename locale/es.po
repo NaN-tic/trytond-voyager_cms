@@ -1,6 +1,17 @@
 #
+# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr "Content-Type: text/plain; charset=utf-8\n"
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
+"PO-Revision-Date: 2026-07-06 08:57+0000\n"
+"Project-Id-Version: \n"
+"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
+"Language: ca_ES\n"
+"Content-Transfer-Encoding: 8bit\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 25.04.0\n"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -25,6 +36,10 @@ msgstr "Texto"
 msgctxt "field:www.article,title:"
 msgid "Title"
 msgstr "Título"
+
+msgctxt "field:www.article,uris:"
+msgid "URIs"
+msgstr "URIs"
 
 msgctxt "field:www.article.category,childs:"
 msgid "Childs"
@@ -162,6 +177,30 @@ msgctxt "field:www.page,published_page:"
 msgid "Published Page"
 msgstr "Página publicada"
 
+msgctxt "field:www.page,seo_description:"
+msgid "SEO Description"
+msgstr "Descripción SEO"
+
+msgctxt "field:www.page,seo_keywords:"
+msgid "SEO Keywords"
+msgstr "Palabras clave SEO"
+
+msgctxt "field:www.page,seo_og_description:"
+msgid "Open Graph Description"
+msgstr "Descripción de Open Graph"
+
+msgctxt "field:www.page,seo_og_image_file:"
+msgid "Open Graph Image"
+msgstr "Imagen de Open Graph"
+
+msgctxt "field:www.page,seo_og_title:"
+msgid "Open Graph Title"
+msgstr "Título de Open Graph"
+
+msgctxt "field:www.page,seo_title:"
+msgid "SEO Title"
+msgstr "Título SEO"
+
 msgctxt "field:www.page,site:"
 msgid "Site"
 msgstr "Sitio"
@@ -290,6 +329,7 @@ msgstr ""
 "Falta el punto final del contenedor de archivos para la generación de URI de"
 " archivos."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
@@ -302,16 +342,20 @@ msgstr ""
 "Falta el endpoint del contenedor de contenido para generar el URI de la "
 "página."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Por favor, configure un sitio antes de generar URI para la página "
 "\"%(page)s\"."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr "Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
+msgstr ""
+"Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."
@@ -452,6 +496,10 @@ msgctxt "view:www.article:"
 msgid "Text"
 msgstr "Texto"
 
+msgctxt "view:www.article:"
+msgid "Uris"
+msgstr "Uris"
+
 msgctxt "view:www.element:"
 msgid "Preview"
 msgstr "Vista previa"
@@ -461,12 +509,20 @@ msgid "Properties"
 msgstr "Propiedades"
 
 msgctxt "view:www.page:"
+msgid "Open Graph"
+msgstr "Open Graph"
+
+msgctxt "view:www.page:"
 msgid "Preview"
 msgstr "Vista previa"
 
 msgctxt "view:www.page:"
 msgid "Properties"
 msgstr "Propiedades"
+
+msgctxt "view:www.page:"
+msgid "SEO"
+msgstr "SEO"
 
 msgctxt "view:www.page:"
 msgid "Uris"
@@ -475,6 +531,10 @@ msgstr "URIs"
 msgctxt "view:www.site:"
 msgid "CMS"
 msgstr "CMS"
+
+msgctxt "view:www.site:"
+msgid "SEO Title Composition"
+msgstr "Composición de títulos SEO"
 
 msgctxt "voyager:v:"
 msgid "Page not found"
