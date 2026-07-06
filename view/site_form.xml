@@ -10,6 +10,13 @@
         <field name="footer"/>
         <label name="main_language"/>
         <field name="main_language"/>
+        <separator string="SEO Title Composition" colspan="4" id="seo_title_composition"/>
+        <label name="seo_title_prefix"/>
+        <field name="seo_title_prefix" colspan="3"/>
+        <label name="seo_title_separator"/>
+        <field name="seo_title_separator" colspan="3"/>
+        <label name="seo_title_suffix"/>
+        <field name="seo_title_suffix" colspan="3"/>
         <field name="languages" colspan="4" mode="tree,form" height="200"/>
         <newline/>
     </xpath>
