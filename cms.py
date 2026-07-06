@@ -1677,6 +1677,9 @@ class VoyagerSite(metaclass=PoolMeta):
     main_language = fields.Many2One('ir.lang', 'Main Language')
     languages = fields.Many2Many(
         'www.site.lang', 'site', 'language', 'Languages')
+    seo_title_prefix = fields.Char('SEO Title Prefix')
+    seo_title_suffix = fields.Char('SEO Title Suffix')
+    seo_title_separator = fields.Char('SEO Title Separator')
 
     @staticmethod
     def _allow_page_state_in_environment(page, web_prefix=None):
