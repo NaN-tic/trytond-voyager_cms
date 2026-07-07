@@ -546,6 +546,6 @@ msgctxt "view:www.site:"
 msgid "SEO Title Composition"
 msgstr "Composició de títol SEO"
 
-msgctxt "voyager:v:"
+msgctxt "xgettext:x:"
 msgid "Page not found"
 msgstr "Pàgina no trobada"
