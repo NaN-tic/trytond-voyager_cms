@@ -296,8 +296,7 @@ class Article(ModelSQL, ModelView):
     image = fields.Many2One('www.file', 'Image', ondelete='SET NULL')
     uris = fields.Function(fields.One2Many('www.uri', None, 'URIs'),
         'get_uris', setter='set_uris')
-    comments = fields.Function(fields.One2Many('www.comment', None, 'Comments'),
-        'get_comments', setter='set_comments')
+    comments = fields.One2Many('www.comment', 'origin', 'Comments')
 
     def get_uris(self, name):
         if not self.id:
@@ -310,20 +309,6 @@ class Article(ModelSQL, ModelView):
 
     @classmethod
     def set_uris(cls, articles, name, value):
-        # Prevent NotImplementedError for the function One2Many field.
-        pass
-
-    def get_comments(self, name):
-        if not self.id:
-            return []
-        Comment = Pool().get('www.comment')
-        origin = f'{self.__name__},{self.id}'
-        return [comment.id for comment in Comment.search([
-                    ('origin', '=', origin),
-                ])]
-
-    @classmethod
-    def set_comments(cls, articles, name, value):
         # Prevent NotImplementedError for the function One2Many field.
         pass
 
