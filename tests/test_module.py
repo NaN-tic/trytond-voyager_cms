@@ -47,7 +47,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(Article._fields['image'].model_name, 'www.file')
         self.assertEqual(Article._fields['uris'].__class__, fields.Function)
         self.assertEqual(Article._fields['uris'].model_name, 'www.uri')
-        self.assertEqual(Article._fields['comments'].__class__, fields.Function)
+        self.assertEqual(Article._fields['comments'].__class__, fields.One2Many)
         self.assertEqual(Article._fields['comments'].model_name, 'www.comment')
 
     @with_transaction()
