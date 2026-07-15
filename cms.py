@@ -7,7 +7,7 @@ from dominate.util import raw
 from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
 from trytond.exceptions import UserError
-from trytond.i18n import gettext as _
+from trytond.modules.xgettext import _
 
 from trytond.model import (
     DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
