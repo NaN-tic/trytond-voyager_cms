@@ -1,6 +1,17 @@
 #
+# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr "Content-Type: text/plain; charset=utf-8\n"
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
+"PO-Revision-Date: 2026-07-06 11:21+0000\n"
+"Project-Id-Version: \n"
+"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
+"Language: ca_ES\n"
+"Content-Transfer-Encoding: 8bit\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 25.04.0\n"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -25,6 +36,10 @@ msgstr "Text"
 msgctxt "field:www.article,title:"
 msgid "Title"
 msgstr "Títol"
+
+msgctxt "field:www.article,uris:"
+msgid "URIs"
+msgstr "URIs"
 
 msgctxt "field:www.article.category,childs:"
 msgid "Childs"
@@ -162,6 +177,30 @@ msgctxt "field:www.page,published_page:"
 msgid "Published Page"
 msgstr "Pàgina publicada"
 
+msgctxt "field:www.page,seo_description:"
+msgid "SEO Description"
+msgstr "Descripció SEO"
+
+msgctxt "field:www.page,seo_keywords:"
+msgid "SEO Keywords"
+msgstr "Paraules clau SEO"
+
+msgctxt "field:www.page,seo_og_description:"
+msgid "Open Graph Description"
+msgstr "Descripció de Open Graph"
+
+msgctxt "field:www.page,seo_og_image_file:"
+msgid "Open Graph Image"
+msgstr "Imatge de Open Graph"
+
+msgctxt "field:www.page,seo_og_title:"
+msgid "Open Graph Title"
+msgstr "Títol de Open Graph"
+
+msgctxt "field:www.page,seo_title:"
+msgid "SEO Title"
+msgstr "Títol SEO"
+
 msgctxt "field:www.page,site:"
 msgid "Site"
 msgstr "Lloc web"
@@ -209,6 +248,18 @@ msgstr "Disseny"
 msgctxt "field:www.site,main_language:"
 msgid "Main Language"
 msgstr "Idioma principal"
+
+msgctxt "field:www.site,seo_title_prefix:"
+msgid "SEO Title Prefix"
+msgstr "Prefix del títol SEO"
+
+msgctxt "field:www.site,seo_title_separator:"
+msgid "SEO Title Separator"
+msgstr "Separador de títols SEO"
+
+msgctxt "field:www.site,seo_title_suffix:"
+msgid "SEO Title Suffix"
+msgstr "Sufix de títol SEO"
 
 msgctxt "field:www.site.lang,language:"
 msgid "Language"
@@ -290,6 +341,7 @@ msgstr ""
 "Falta el punt final de l'embolcall de fitxers per a la generació de l'URI "
 "del fitxer."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
@@ -300,16 +352,20 @@ msgid "Missing content wrapper endpoint for page URI generation."
 msgstr ""
 "Falta l’endpoint del contenidor de contingut per generar l’URI de la pàgina."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Si us plau, defineu un lloc abans de generar URI per a la pàgina "
 "\"%(page)s\"."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr "Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
+msgstr ""
+"Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
 
+#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
@@ -450,6 +506,10 @@ msgctxt "view:www.article:"
 msgid "Text"
 msgstr "Text"
 
+msgctxt "view:www.article:"
+msgid "Uris"
+msgstr "URIs"
+
 msgctxt "view:www.element:"
 msgid "Preview"
 msgstr "Vista prèvia"
@@ -459,12 +519,20 @@ msgid "Properties"
 msgstr "Propietats"
 
 msgctxt "view:www.page:"
+msgid "Open Graph"
+msgstr "Open Graph"
+
+msgctxt "view:www.page:"
 msgid "Preview"
 msgstr "Vista prèvia"
 
 msgctxt "view:www.page:"
 msgid "Properties"
 msgstr "Propietats"
+
+msgctxt "view:www.page:"
+msgid "SEO"
+msgstr "SEO"
 
 msgctxt "view:www.page:"
 msgid "Uris"
@@ -474,6 +542,10 @@ msgctxt "view:www.site:"
 msgid "CMS"
 msgstr "CMS"
 
-msgctxt "voyager:v:"
+msgctxt "view:www.site:"
+msgid "SEO Title Composition"
+msgstr "Composició de títol SEO"
+
+msgctxt "xgettext:x:"
 msgid "Page not found"
 msgstr "Pàgina no trobada"
