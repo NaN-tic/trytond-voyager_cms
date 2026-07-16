@@ -1626,6 +1626,38 @@ class VoyagerURI(metaclass=PoolMeta):
     @classmethod
     def _get_resources(cls):
         return super()._get_resources() + ['www.page', 'www.file']
+    
+    @classmethod
+    def _sitemap_rows(cls, site):
+        rows = super()._sitemap_rows(site)
+        if not rows:
+            return rows
+
+        page_rows = {}
+        for row in rows:
+            resource = row.get('resource')
+            if not resource or not resource.startswith('www.page,'):
+                continue
+            _, _, raw_id = resource.partition(',')
+            try:
+                page_rows[row['id']] = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+        if not page_rows:
+            return rows
+
+        Page = Pool().get('www.page')
+        published_ids = {
+            page.id for page in Page.search([
+                    ('id', 'in', list(page_rows.values())),
+                    ('state', '=', 'published'),
+                ])
+        }
+        return [
+            row for row in rows
+            if row['id'] not in page_rows
+            or page_rows[row['id']] in published_ids
+        ]
 
 
 class VoyagerMenu(metaclass=PoolMeta):
