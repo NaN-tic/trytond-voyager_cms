@@ -297,6 +297,13 @@ class Article(ModelSQL, ModelView):
     uris = fields.Function(fields.One2Many('www.uri', None, 'URIs'),
         'get_uris', setter='set_uris')
     comments = fields.One2Many('www.comment', 'origin', 'Comments')
+    seo_title = fields.Char('SEO Title', translate=True)
+    seo_description = fields.Text('SEO Description', translate=True)
+    seo_keywords = fields.Char('SEO Keywords', translate=True)
+    seo_og_title = fields.Char('Open Graph Title', translate=True)
+    seo_og_description = fields.Text('Open Graph Description', translate=True)
+    seo_og_image_file = fields.Many2One('www.file', 'Open Graph Image',
+        domain=[('site', '=', Eval('site'))])
 
     def get_uris(self, name):
         if not self.id:

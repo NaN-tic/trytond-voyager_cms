@@ -25,6 +25,30 @@ msgctxt "field:www.article,image:"
 msgid "Image"
 msgstr "Imagen"
 
+msgctxt "field:www.article,seo_description:"
+msgid "SEO Description"
+msgstr "Descripción SEO"
+
+msgctxt "field:www.article,seo_keywords:"
+msgid "SEO Keywords"
+msgstr "Palabras clave SEO"
+
+msgctxt "field:www.article,seo_og_description:"
+msgid "Open Graph Description"
+msgstr "Descripción de Open Graph"
+
+msgctxt "field:www.article,seo_og_image_file:"
+msgid "Open Graph Image"
+msgstr "Imagen de Open Graph"
+
+msgctxt "field:www.article,seo_og_title:"
+msgid "Open Graph Title"
+msgstr "Título de Open Graph"
+
+msgctxt "field:www.article,seo_title:"
+msgid "SEO Title"
+msgstr "Título SEO"
+
 msgctxt "field:www.article,site:"
 msgid "Site"
 msgstr "Sitio"

@@ -17,5 +17,20 @@
         <page string="Comments" id="comments">
             <field name="comments" colspan="4" mode="tree,form" height="300"/>
         </page>
+        <page string="SEO" id="seo">
+            <label name="seo_title"/>
+            <field name="seo_title" colspan="3"/>
+            <label name="seo_keywords"/>
+            <field name="seo_keywords" colspan="3"/>
+            <label name="seo_description"/>
+            <field name="seo_description" colspan="3"/>
+            <separator string="Open Graph" colspan="4" id="seo_open_graph"/>
+            <label name="seo_og_title"/>
+            <field name="seo_og_title" colspan="3"/>
+            <label name="seo_og_image_file"/>
+            <field name="seo_og_image_file" colspan="3"/>
+            <label name="seo_og_description"/>
+            <field name="seo_og_description" colspan="3"/>
+        </page>
     </notebook>
 </form>
