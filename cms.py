@@ -1780,8 +1780,11 @@ class VoyagerSite(metaclass=PoolMeta):
         except HTTPException as e:
             if e.code in error_handlers:
                 endpoint = error_handlers[e.code]
-                return (None, None, None, None, None,
-                    adapter.build(endpoint.__name__, None))
+                return (None, None, adapter, endpoint_args, language, {
+                        'endpoint': endpoint.__name__,
+                        'args': {'status': e.code},
+                        'status': e.code,
+                        })
             raise e
         return endpoint, args, adapter, endpoint_args, language, None
 
