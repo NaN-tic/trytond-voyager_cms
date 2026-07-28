@@ -305,14 +305,20 @@ class Article(ModelSQL, ModelView):
     seo_og_image_file = fields.Many2One('www.file', 'Open Graph Image',
         domain=[('site', '=', Eval('site'))])
 
-    def get_uris(self, name):
-        if not self.id:
-            return []
+    @classmethod
+    def get_uris(cls, articles, name):
         URI = Pool().get('www.uri')
-        resource = f'{self.__name__},{self.id}'
-        return [uri.id for uri in URI.search([
-                    ('resource', '=', resource),
-                ], order=[('id', 'ASC')])]
+        result = {}
+        for article in articles:
+            article_id = getattr(article, 'id', None)
+            if not article_id:
+                result[article_id] = []
+                continue
+            resource = f'{cls.__name__},{article_id}'
+            result[article_id] = [uri.id for uri in URI.search([
+                        ('resource', '=', resource),
+                    ], order=[('id', 'ASC')])]
+        return result
 
     @classmethod
     def set_uris(cls, articles, name, value):
@@ -1632,7 +1638,8 @@ class VoyagerURI(metaclass=PoolMeta):
 
     @classmethod
     def _get_resources(cls):
-        return super()._get_resources() + ['www.page', 'www.file']
+        return super()._get_resources() + [
+            'www.page', 'www.file', 'www.article']
     
     @classmethod
     def _sitemap_rows(cls, site):
