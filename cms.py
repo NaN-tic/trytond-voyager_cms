@@ -4,7 +4,6 @@ from xml.sax.saxutils import escape
 import magic
 from dominate.tags import div
 from dominate.util import raw
-from werkzeug.exceptions import HTTPException
 from werkzeug.wrappers import Response
 from trytond.exceptions import UserError
 from trytond.modules.xgettext import _
@@ -1678,76 +1677,16 @@ class VoyagerSite(metaclass=PoolMeta):
         # expose only published pages.
         return page.state == 'published'
 
-    def match_request(self, request, web_prefix=None):
-        pool = Pool()
-        VoyagerURI = pool.get('www.uri')
+    def check_request_uri(self, voyager_uri, web_prefix=None):
+        if not super().check_request_uri(voyager_uri, web_prefix):
+            return False
 
-        web_map, adapter, endpoint_args, error_handlers = self.get_site_info(
-            web_prefix)
-
-        try:
-            language = None
-            request_path = request.path
-            if web_prefix:
-                request_path = request.path.replace(
-                    web_prefix, '', 1)
-
-            if self.route_method == 'uri':
-                voyager_uri = VoyagerURI.search([
-                    ('site', '=', self.id),
-                    ('uri', '=', request_path)], limit=1)
-
-                if voyager_uri:
-                    voyager_uri = voyager_uri[0]
-                    resource = voyager_uri.resource
-                    resource_model = getattr(resource, '__name__', None)
-                    if resource_model == 'www.page':
-                        # si l'estat no toca, ignora la uri
-                        if not self._allow_page_state_in_environment(
-                                resource, web_prefix):
-                            voyager_uri = None
-
-                if voyager_uri:
-                    endpoint = voyager_uri.endpoint.name
-                    resource = voyager_uri.resource
-                    resource_model = getattr(resource, '__name__', None)
-                    args = {}
-
-                    if not resource_model:
-                        resource_model = str(resource).split(',')[0]
-                    try:
-                        EndpointModel = pool.get(endpoint)
-                    except Exception:
-                        EndpointModel = None
-                    if EndpointModel:
-                        for field_name, field in EndpointModel._fields.items():
-                            if (isinstance(field, fields.Many2One)
-                                    and field.model_name == resource_model):
-                                args[field_name] = resource.id
-                    if voyager_uri.language:
-                        language = voyager_uri.language.code
-                else:
-                    if request.method:
-                        endpoint, args = adapter.match(request.path,
-                            request.method)
-                    else:
-                        endpoint, args = adapter.match(request.path)
-            elif self.route_method == 'endpoint':
-                if request.method:
-                    endpoint, args = adapter.match(request.path,
-                        request.method)
-                else:
-                    endpoint, args = adapter.match(request.path)
-        except HTTPException as e:
-            if e.code in error_handlers:
-                endpoint = error_handlers[e.code]
-                return (None, None, adapter, endpoint_args, language, {
-                        'endpoint': endpoint.__name__,
-                        'args': {'status': e.code},
-                        'status': e.code,
-                        })
-            raise e
-        return endpoint, args, adapter, endpoint_args, language, None
+        resource = voyager_uri.resource
+        resource_model = getattr(resource, '__name__', None)
+        if resource_model == 'www.page':
+            return self._allow_page_state_in_environment(
+                resource, web_prefix)
+        return True
 
     @classmethod
     def delete(cls, sites):
