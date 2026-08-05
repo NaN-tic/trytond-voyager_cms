@@ -1199,52 +1199,16 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertFalse(Site._allow_page_state_in_environment(page))
 
     @with_transaction()
-    def test_match_request_keeps_draft_page_from_routes_dispatch(self):
+    def test_check_request_uri_keeps_draft_page_from_routes_dispatch(self):
         Site = Pool().get('www.site')
-
-        class Adapter:
-            def match(self, path, method=None):
-                raise AssertionError('adapter.match should not be used')
-
-        class EndpointModel:
-            _fields = {
-                'page': fields.Many2One('www.page', 'Page'),
-            }
-
-        site = SimpleNamespace(
-            id=1,
-            route_method='uri',
-            get_site_info=lambda web_prefix: (None, Adapter(), {}, {}),
-            _allow_page_state_in_environment=(
-                Site._allow_page_state_in_environment),
-        )
-
+        site = Site()
         page = SimpleNamespace(id=8, state='draft', __name__='www.page')
         voyager_uri = SimpleNamespace(
-            endpoint=SimpleNamespace(name='www.content.wrapper'),
             resource=page,
-            language=None,
         )
-        voyager_uri_model = SimpleNamespace(search=lambda domain, limit=None: [
-                voyager_uri])
-        pool_mock = SimpleNamespace(get=lambda name: {
-                'www.uri': voyager_uri_model,
-                'www.content.wrapper': EndpointModel,
-                }[name])
 
-        request = SimpleNamespace(path='/draft/en/test', method='GET')
-
-        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
-            PoolMock.return_value = pool_mock
-            endpoint, args, adapter, endpoint_args, language, error = (
-                Site.match_request(site, request, '/database/web'))
-
-        self.assertEqual(endpoint, 'www.content.wrapper')
-        self.assertEqual(args, {'page': 8})
-        self.assertIsInstance(adapter, Adapter)
-        self.assertEqual(endpoint_args, {})
-        self.assertIsNone(language)
-        self.assertIsNone(error)
+        self.assertTrue(site.check_request_uri(
+                voyager_uri, '/database/web'))
 
     @with_transaction()
     def test_match_request_hides_draft_page_from_standalone_dispatch(self):
@@ -1254,32 +1218,23 @@ class VoyagerCmsTestCase(ModuleTestCase):
             def match(self, path, method=None):
                 return 'www.fallback', {'path': path}
 
-        site = SimpleNamespace(
-            id=1,
-            route_method='uri',
-            get_site_info=lambda web_prefix: (None, Adapter(), {}, {}),
-            _allow_page_state_in_environment=(
-                Site._allow_page_state_in_environment),
-        )
-
+        site = Site()
+        site.route_method = 'uri'
         page = SimpleNamespace(id=8, state='draft', __name__='www.page')
         voyager_uri = SimpleNamespace(
-            endpoint=SimpleNamespace(name='www.content.wrapper'),
             resource=page,
-            language=None,
         )
-        voyager_uri_model = SimpleNamespace(search=lambda domain, limit=None: [
-                voyager_uri])
-        pool_mock = SimpleNamespace(get=lambda name: {
-                'www.uri': voyager_uri_model,
-                }[name])
-
+        VoyagerURI = SimpleNamespace(
+            search=lambda domain, limit=None: [voyager_uri])
+        pool_mock = SimpleNamespace(get=lambda name: VoyagerURI)
         request = SimpleNamespace(path='/draft/en/test', method='GET')
 
-        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
-            PoolMock.return_value = pool_mock
+        with patch.object(Site, 'get_site_info', return_value=(
+                    None, Adapter(), {}, {})), \
+                patch('trytond.modules.voyager.voyager.Pool',
+                    return_value=pool_mock):
             endpoint, args, adapter, endpoint_args, language, error = (
-                Site.match_request(site, request))
+                site.match_request(request))
 
         self.assertEqual(endpoint, 'www.fallback')
         self.assertEqual(args, {'path': '/draft/en/test'})
