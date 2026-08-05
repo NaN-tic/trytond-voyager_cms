@@ -542,6 +542,7 @@ class Page(Workflow, ModelSQL, ModelView):
             if not page_id:
                 continue
             resource_ref = f'{cls.__name__},{page_id}'
+            show_sitemap = cls._uri_show_sitemap(page)
 
             for command in value:
                 if not command:
@@ -558,6 +559,8 @@ class Page(Workflow, ModelSQL, ModelView):
                         ids, vals = command[1], command[2]
                     if not ids or not vals:
                         continue
+                    vals = dict(vals)
+                    vals['show_sitemap'] = show_sitemap
                     uris = URI.search([
                             ('id', 'in', ids),
                             ('resource', '=', resource_ref),
@@ -582,6 +585,7 @@ class Page(Workflow, ModelSQL, ModelView):
                     for vals in records:
                         vals = dict(vals or {})
                         vals.setdefault('resource', resource_ref)
+                        vals['show_sitemap'] = show_sitemap
                         if 'site' not in vals:
                             site = getattr(page, 'site', None)
                             if getattr(site, 'id', None):
@@ -651,6 +655,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 'site': row['site'],
                 'language': row['language'],
                 'endpoint': row['endpoint'],
+                'show_sitemap': cls._uri_show_sitemap(page),
             }
             created, = URI.create([values])
             created_by_old_id[row['id']] = created
@@ -723,6 +728,10 @@ class Page(Workflow, ModelSQL, ModelView):
         if state == 'published':
             return ''
         return f'/{state}'
+
+    @staticmethod
+    def _uri_show_sitemap(page):
+        return getattr(page, 'state', None) == 'published'
 
     @classmethod
     def _uri_from_name(cls, name, code, state='published'):
@@ -852,6 +861,7 @@ class Page(Workflow, ModelSQL, ModelView):
                       page=page.rec_name)
                 )
             resource_ref = f'{page.__name__},{page.id}'
+            show_sitemap = cls._uri_show_sitemap(page)
             existing_uris = {}
             existing_uris_by_language = {}
             for uri in URI.search([
@@ -925,6 +935,7 @@ class Page(Workflow, ModelSQL, ModelView):
                                 'uri': uri_value,
                                 'language': language.id,
                                 'endpoint': endpoint.id,
+                                'show_sitemap': show_sitemap,
                                 }])[0]
                 else:
                     URI.write([uri], {
@@ -932,6 +943,7 @@ class Page(Workflow, ModelSQL, ModelView):
                             'uri': uri_value,
                             'language': language.id,
                             'endpoint': endpoint.id,
+                            'show_sitemap': show_sitemap,
                             })
 
                 new_uris.append(uri)

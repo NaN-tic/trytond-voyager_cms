@@ -627,7 +627,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
     def test_page_set_uris_forwards_writes_to_www_uri(self):
         Page = Pool().get('www.page')
 
-        page = SimpleNamespace(id=5, site=SimpleNamespace(id=3))
+        page = SimpleNamespace(
+            id=5, site=SimpleNamespace(id=3), state='draft')
         uri_record = SimpleNamespace(id=1)
 
         pool_mock = SimpleNamespace()
@@ -650,13 +651,17 @@ class VoyagerCmsTestCase(ModuleTestCase):
         write_mock.assert_called_once()
         args, kwargs = write_mock.call_args
         self.assertEqual([r.id for r in args[0]], [1])
-        self.assertEqual(args[1], {'uri': '/draft/en/test'})
+        self.assertEqual(args[1], {
+                'uri': '/draft/en/test',
+                'show_sitemap': False,
+                })
 
     @with_transaction()
     def test_page_set_uris_supports_numeric_o2m_commands(self):
         Page = Pool().get('www.page')
 
-        page = SimpleNamespace(id=5, site=SimpleNamespace(id=3))
+        page = SimpleNamespace(
+            id=5, site=SimpleNamespace(id=3), state='published')
         uri_record = SimpleNamespace(id=1)
 
         pool_mock = SimpleNamespace()
@@ -677,7 +682,10 @@ class VoyagerCmsTestCase(ModuleTestCase):
         write_mock.assert_called_once()
         args, kwargs = write_mock.call_args
         self.assertEqual([r.id for r in args[0]], [1])
-        self.assertEqual(args[1], {'uri': '/draft/en/test'})
+        self.assertEqual(args[1], {
+                'uri': '/draft/en/test',
+                'show_sitemap': True,
+                })
 
     @with_transaction()
     def test_page_generate_uri_uses_selected_main_uri_language(self):
@@ -745,6 +753,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
                     self._next_id += 1
                     rec.resource = values['resource']
                     rec.site = SimpleNamespace(id=values['site'])
+                    rec.show_sitemap = values['show_sitemap']
                     self._records.append(rec)
                     created.append(rec)
                 return created
@@ -802,6 +811,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
         by_code = {u.language.code: u for u in uri_model._records}
         self.assertIsNone(by_code['en'].main_uri)
         self.assertEqual(by_code['es'].main_uri, by_code['en'].id)
+        self.assertFalse(by_code['en'].show_sitemap)
+        self.assertFalse(by_code['es'].show_sitemap)
 
     @with_transaction()
     def test_page_on_change_site_without_site_clears_main_uri_language(self):
@@ -889,6 +900,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
         # First write should keep the manually edited URI and set endpoint.
         self.assertEqual(written[0][1]['uri'], '/draft/en/test')
         self.assertIn('endpoint', written[0][1])
+        self.assertFalse(written[0][1]['show_sitemap'])
 
     @with_transaction()
     def test_generate_uri_removes_draft_prefix_from_manual_uri_on_publish(self):
@@ -955,6 +967,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         self.assertTrue(written)
         self.assertEqual(written[0][1]['uri'], '/en/custom-slug')
+        self.assertTrue(written[0][1]['show_sitemap'])
 
     @with_transaction()
     def test_generate_uri_adds_draft_prefix_to_manual_uri_on_draft(self):
@@ -1021,6 +1034,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
 
         self.assertTrue(written)
         self.assertEqual(written[0][1]['uri'], '/draft/en/custom-slug')
+        self.assertFalse(written[0][1]['show_sitemap'])
 
     @with_transaction()
     def test_uri_from_name_builds_expected_slug(self):
@@ -1143,7 +1157,8 @@ class VoyagerCmsTestCase(ModuleTestCase):
         )
         pool_mock = SimpleNamespace(get=lambda name: uri_model)
 
-        page = SimpleNamespace(id=9, __name__='www.page')
+        page = SimpleNamespace(
+            id=9, __name__='www.page', state='published')
         snapshot = [
             {
                 'id': 1,
@@ -1171,8 +1186,10 @@ class VoyagerCmsTestCase(ModuleTestCase):
         delete_uris.assert_called_once_with([page])
         self.assertEqual(created[0]['resource'], 'www.page,9')
         self.assertEqual(created[0]['uri'], '/en/custom-slug')
+        self.assertTrue(created[0]['show_sitemap'])
         self.assertEqual(created[1]['resource'], 'www.page,9')
         self.assertEqual(created[1]['uri'], '/es/custom-slug')
+        self.assertTrue(created[1]['show_sitemap'])
         self.assertEqual(len(writes), 1)
         self.assertEqual(writes[0][1], {'main_uri': 20})
 
