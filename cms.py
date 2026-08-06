@@ -1623,6 +1623,11 @@ class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
     @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls.show_sitemap.help = gettext('voyager_cms.msg_help_uri_show_sitemap')
+
+    @classmethod
     def _get_resources(cls):
         return super()._get_resources() + ['www.page', 'www.file']
 
