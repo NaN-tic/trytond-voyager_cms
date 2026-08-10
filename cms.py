@@ -4,6 +4,8 @@ from xml.sax.saxutils import escape
 import magic
 from dominate.tags import div
 from dominate.util import raw
+from sql import Cast
+from sql.operators import Concat
 from werkzeug.wrappers import Response
 from trytond.exceptions import UserError
 from trytond.modules.xgettext import _
@@ -1626,6 +1628,22 @@ class VoyagerURI(metaclass=PoolMeta):
     def __setup__(cls):
         super().__setup__()
         cls.show_sitemap.help = gettext('voyager_cms.msg_help_uri_show_sitemap')
+
+    @classmethod
+    def _sitemap_where(cls, table, site):
+        pool = Pool()
+        Page = pool.get('www.page')
+        page = Page.__table__()
+
+        where = super()._sitemap_where(table, site)
+        draft_pages = page.select(
+            Concat(Page.__name__ + ',', Cast(page.id, 'TEXT')),
+            where=page.state == 'draft')
+
+        return where & (
+            (table.resource == None)
+            | ~table.resource.in_(draft_pages)
+        )
 
     @classmethod
     def _get_resources(cls):
