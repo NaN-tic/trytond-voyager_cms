@@ -14,7 +14,7 @@ from trytond.model import (
     DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
     sequence_ordered, tree)
 from trytond.pool import Pool, PoolMeta
-from trytond.i18n import gettext
+from trytond.i18n import gettext, lazy_gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
@@ -1629,7 +1629,7 @@ class VoyagerURI(metaclass=PoolMeta):
     @classmethod
     def __setup__(cls):
         super().__setup__()
-        cls.show_sitemap.help = gettext('voyager_cms.msg_help_uri_show_sitemap')
+        cls.show_sitemap.help = lazy_gettext('voyager_cms.msg_help_uri_show_sitemap')
 
     @classmethod
     def _sitemap_where(cls, table, site):

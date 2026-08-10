@@ -1,17 +1,6 @@
 #
-# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
-"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
-"PO-Revision-Date: 2026-07-06 11:21+0000\n"
-"Project-Id-Version: \n"
-"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
-"Language: ca_ES\n"
-"Content-Transfer-Encoding: 8bit\n"
-"MIME-Version: 1.0\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+msgstr "Content-Type: text/plain; charset=utf-8\n"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -277,6 +266,10 @@ msgstr ""
 "Si està marcat, el fitxer de resposta s'envia com a fitxer adjunt i el "
 "navegador el descarregarà."
 
+msgctxt "help:www.uri,show_sitemap:"
+msgid "voyager_cms.msg_help_uri_show_sitemap"
+msgstr "voyager_cms.msg_help_uri_show_sitemap"
+
 msgctxt "model:ir.action,name:act_www_article"
 msgid "Articles"
 msgstr "Articles"
@@ -341,31 +334,34 @@ msgstr ""
 "Falta el punt final de l'embolcall de fitxers per a la generació de l'URI "
 "del fitxer."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
 "Si us plau, defineu un lloc abans de generar URI per al fitxer \"%(file)s\"."
+
+msgctxt "model:ir.message,text:msg_help_uri_show_sitemap"
+msgid ""
+"Include the URI in the sitemap unless it belongs to an unpublished page or "
+"article."
+msgstr ""
+"Incloeu l'URI al mapa del lloc tret que pertanyi a una pàgina o a un article "
+"sense publicar."
 
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
 msgid "Missing content wrapper endpoint for page URI generation."
 msgstr ""
 "Falta l’endpoint del contenidor de contingut per generar l’URI de la pàgina."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Si us plau, defineu un lloc abans de generar URI per a la pàgina "
 "\"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr ""
-"Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
+msgstr "Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
