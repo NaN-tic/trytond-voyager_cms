@@ -630,6 +630,7 @@ class Page(Workflow, ModelSQL, ModelView):
                     'endpoint': (
                         uri.endpoint.id if getattr(uri, 'endpoint', None)
                         else None),
+                    'show_sitemap': uri.show_sitemap,
                     'main_uri': (
                         uri.main_uri.id if getattr(uri, 'main_uri', None)
                         else None),
@@ -653,6 +654,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 'site': row['site'],
                 'language': row['language'],
                 'endpoint': row['endpoint'],
+                'show_sitemap': row['show_sitemap'],
             }
             created, = URI.create([values])
             created_by_old_id[row['id']] = created
