@@ -4,6 +4,8 @@ from xml.sax.saxutils import escape
 import magic
 from dominate.tags import div
 from dominate.util import raw
+from sql import Cast
+from sql.operators import Concat
 from werkzeug.wrappers import Response
 from trytond.exceptions import UserError
 from trytond.modules.xgettext import _
@@ -12,7 +14,7 @@ from trytond.model import (
     DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
     sequence_ordered, tree)
 from trytond.pool import Pool, PoolMeta
-from trytond.i18n import gettext
+from trytond.i18n import gettext, lazy_gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
@@ -628,6 +630,7 @@ class Page(Workflow, ModelSQL, ModelView):
                     'endpoint': (
                         uri.endpoint.id if getattr(uri, 'endpoint', None)
                         else None),
+                    'show_sitemap': uri.show_sitemap,
                     'main_uri': (
                         uri.main_uri.id if getattr(uri, 'main_uri', None)
                         else None),
@@ -651,6 +654,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 'site': row['site'],
                 'language': row['language'],
                 'endpoint': row['endpoint'],
+                'show_sitemap': row['show_sitemap'],
             }
             created, = URI.create([values])
             created_by_old_id[row['id']] = created
@@ -1621,6 +1625,27 @@ class FileWrapper(Endpoint):
 
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls.show_sitemap.help = lazy_gettext('voyager_cms.msg_help_uri_show_sitemap')
+
+    @classmethod
+    def _sitemap_where(cls, table, site):
+        pool = Pool()
+        Page = pool.get('www.page')
+        page = Page.__table__()
+
+        where = super()._sitemap_where(table, site)
+        draft_pages = page.select(
+            Concat(Page.__name__ + ',', Cast(page.id, 'TEXT')),
+            where=page.state == 'draft')
+
+        return where & (
+            (table.resource == None)
+            | ~table.resource.in_(draft_pages)
+        )
 
     @classmethod
     def _get_resources(cls):

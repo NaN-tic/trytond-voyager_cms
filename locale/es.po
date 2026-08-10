@@ -1,17 +1,6 @@
 #
-# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
-"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
-"PO-Revision-Date: 2026-07-06 11:21+0000\n"
-"Project-Id-Version: \n"
-"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
-"Language: ca_ES\n"
-"Content-Transfer-Encoding: 8bit\n"
-"MIME-Version: 1.0\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+msgstr "Content-Type: text/plain; charset=utf-8\n"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -277,6 +266,10 @@ msgstr ""
 "Si está marcada esta opción, la respuesta del archivo se envía como un "
 "archivo adjunto y el navegador lo descargará."
 
+msgctxt "help:www.uri,show_sitemap:"
+msgid "voyager_cms.msg_help_uri_show_sitemap"
+msgstr "voyager_cms.msg_help_uri_show_sitemap"
+
 msgctxt "model:ir.action,name:act_www_article"
 msgid "Articles"
 msgstr "Artículos"
@@ -341,12 +334,19 @@ msgstr ""
 "Falta el punto final del contenedor de archivos para la generación de URI de"
 " archivos."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
 "Por favor, configure un sitio antes de generar URI para el archivo "
 "\"%(file)s\"."
+
+msgctxt "model:ir.message,text:msg_help_uri_show_sitemap"
+msgid ""
+"Include the URI in the sitemap unless it belongs to an unpublished page or "
+"article."
+msgstr ""
+"Incluya la URI en el mapa del sitio a menos que pertenezca a una página o a "
+"un artículo sin publicar."
 
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_endpoint"
 msgid "Missing content wrapper endpoint for page URI generation."
@@ -354,20 +354,16 @@ msgstr ""
 "Falta el endpoint del contenedor de contenido para generar el URI de la "
 "página."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Por favor, configure un sitio antes de generar URI para la página "
 "\"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr ""
-"Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
+msgstr "Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."

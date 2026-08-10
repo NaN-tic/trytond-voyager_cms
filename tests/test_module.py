@@ -1117,6 +1117,37 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(restored, [(published_copy, snapshot)])
 
     @with_transaction()
+    def test_snapshot_uris_preserves_show_sitemap(self):
+        Page = Pool().get('www.page')
+
+        uri = SimpleNamespace(
+            id=1,
+            uri='/en/custom-slug',
+            site=SimpleNamespace(id=3),
+            language=SimpleNamespace(id=1),
+            endpoint=SimpleNamespace(id=99),
+            show_sitemap=False,
+            main_uri=None,
+        )
+        uri_model = SimpleNamespace(search=lambda domain, order: [uri])
+        pool_mock = SimpleNamespace(get=lambda name: uri_model)
+        page = SimpleNamespace(id=5, __name__='www.page')
+
+        with patch('trytond.modules.voyager_cms.cms.Pool') as PoolMock:
+            PoolMock.return_value = pool_mock
+            snapshot = Page._snapshot_uris(page)
+
+        self.assertEqual(snapshot, [{
+                    'id': 1,
+                    'uri': '/en/custom-slug',
+                    'site': 3,
+                    'language': 1,
+                    'endpoint': 99,
+                    'show_sitemap': False,
+                    'main_uri': None,
+                    }])
+
+    @with_transaction()
     def test_restore_uris_recreates_original_links_for_published_copy(self):
         Page = Pool().get('www.page')
 
@@ -1151,6 +1182,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 'site': 3,
                 'language': 1,
                 'endpoint': 99,
+                'show_sitemap': False,
                 'main_uri': None,
             },
             {
@@ -1159,6 +1191,7 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 'site': 3,
                 'language': 2,
                 'endpoint': 99,
+                'show_sitemap': True,
                 'main_uri': 1,
             },
         ]
@@ -1171,8 +1204,10 @@ class VoyagerCmsTestCase(ModuleTestCase):
         delete_uris.assert_called_once_with([page])
         self.assertEqual(created[0]['resource'], 'www.page,9')
         self.assertEqual(created[0]['uri'], '/en/custom-slug')
+        self.assertFalse(created[0]['show_sitemap'])
         self.assertEqual(created[1]['resource'], 'www.page,9')
         self.assertEqual(created[1]['uri'], '/es/custom-slug')
+        self.assertTrue(created[1]['show_sitemap'])
         self.assertEqual(len(writes), 1)
         self.assertEqual(writes[0][1], {'main_uri': 20})
 
