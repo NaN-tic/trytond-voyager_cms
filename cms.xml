@@ -59,6 +59,43 @@ this repository contains the full copyright notices and license terms. -->
             <field name="view" ref="www_article_view_form"/>
             <field name="act_window" ref="act_www_article"/>
         </record>
+        <record model="ir.model.button" id="www_article_generate_uri_button">
+            <field name="name">generate_uri</field>
+            <field name="string">Generate URI</field>
+            <field name="model">www.article</field>
+        </record>
+        <record model="ir.model.button" id="www_article_publish_button">
+            <field name="name">publish</field>
+            <field name="string">Publish</field>
+            <field name="model">www.article</field>
+        </record>
+        <record model="ir.model.button" id="www_article_draft_button">
+            <field name="name">draft</field>
+            <field name="string">Draft</field>
+            <field name="model">www.article</field>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_article_domain_draft">
+            <field name="name">Draft</field>
+            <field name="sequence" eval="10"/>
+            <field name="domain" eval="[('state', '=', 'draft')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_article"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_article_domain_published">
+            <field name="name">Published</field>
+            <field name="sequence" eval="30"/>
+            <field name="domain" eval="[('state', '=', 'published')]" pyson="1"/>
+            <field name="count" eval="True"/>
+            <field name="act_window" ref="act_www_article"/>
+        </record>
+        <record model="ir.action.act_window.domain"
+            id="act_www_article_domain_all">
+            <field name="name">All</field>
+            <field name="sequence" eval="9999"/>
+            <field name="act_window" ref="act_www_article"/>
+        </record>
 
         <!-- www.article.category -->
         <record model="ir.ui.view" id="www_article_category_view_tree">
