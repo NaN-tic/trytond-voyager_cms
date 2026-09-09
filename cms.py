@@ -6,7 +6,10 @@ from xml.sax.saxutils import escape
 import magic
 from dominate.tags import div
 from dominate.util import raw
+from sql import Table
+from sql.operators import Exists
 from werkzeug.wrappers import Response
+from trytond import backend
 from trytond.exceptions import UserError
 from trytond.modules.xgettext import _
 
@@ -32,6 +35,29 @@ SCHEMA_STATES = {
 SCHEMA_DEPENDS = ['page_state']
 COMMENT_STATES = {'readonly': Eval('state') != 'draft'}
 COMMENT_DEPENDS = ['state']
+
+ARTICLE_URI_SYNC_FIELDS = {
+        'state', 'title', 'site', 'category', 'main_uri_language',
+    }
+
+def _get_valid_component_model_ids():
+    pool = Pool()
+    Model = pool.get('ir.model')
+    model_names = sorted({
+        name for name, klass in pool.iterobject()
+        if issubclass(klass, ComponentCMS)
+    })
+    if not model_names:
+        return []
+    return [model.id for model in Model.search([
+        ('name', 'in', model_names),
+    ])]
+
+
+def _get_valid_models_map(records):
+    model_ids = _get_valid_component_model_ids()
+    return {record.id: model_ids for record in records}
+
 
 class _LayoutRenderProxy:
     __slots__ = ('_layout', 'content', 'title')
@@ -288,6 +314,27 @@ class File(DeactivableMixin, ModelSQL, ModelView):
 class Article(Workflow, ModelSQL, ModelView):
     __name__ = 'www.article'
 
+    @classmethod
+    def __register__(cls, module_name):
+        if backend.TableHandler.table_exist('ir_model_data'):
+            model_data = Table('ir_model_data')
+            target_model_data = Table('ir_model_data')
+            cursor = Transaction().connection.cursor()
+            cursor.execute(*model_data.update(
+                    [model_data.module], ['voyager_cms'],
+                    where=((model_data.module != 'voyager_cms')
+                        & (model_data.model == 'ir.model.button')
+                        & model_data.fs_id.in_(
+                            ('www_article_draft_button',
+                                'www_article_generate_uri_button',
+                                'www_article_publish_button'))
+                        & ~Exists(target_model_data.select(
+                            target_model_data.id,
+                            where=(target_model_data.module == 'voyager_cms')
+                            & (target_model_data.fs_id
+                                == model_data.fs_id))))))
+        super().__register__(module_name)
+
     title = fields.Char('Title', required=True, translate=True)
     site = fields.Many2One('www.site', 'Site', required=True,
         ondelete='CASCADE')
@@ -305,41 +352,14 @@ class Article(Workflow, ModelSQL, ModelView):
     seo_og_description = fields.Text('Open Graph Description', translate=True)
     seo_og_image_file = fields.Many2One('www.file', 'Open Graph Image',
         domain=[('site', '=', Eval('site'))])
-
-    @classmethod
-    def get_uris(cls, articles, name):
-        URI = Pool().get('www.uri')
-        result = {}
-        for article in articles:
-            article_id = getattr(article, 'id', None)
-            if not article_id:
-                result[article_id] = []
-                continue
-            resource = f'{cls.__name__},{article_id}'
-            result[article_id] = [uri.id for uri in URI.search([
-                        ('resource', '=', resource),
-                    ], order=[('id', 'ASC')])]
-        return result
-
-    @classmethod
-    def set_uris(cls, articles, name, value):
-        pass
-
-
-    _readonly_states = {'readonly': Eval('state') != 'draft'}
-    _state_depends = ['state']
-    _uri_sync_fields = {
-        'state', 'title', 'site', 'category', 'main_uri_language',
-    }
-
     available_languages = fields.Function(
         fields.Many2Many('ir.lang', None, None, 'Available Languages'),
         'on_change_with_available_languages')
     main_uri_language = fields.Many2One(
         'ir.lang', 'Main URI Language',
         domain=[('id', 'in', Eval('available_languages', []))],
-        states=_readonly_states,
-        depends=_state_depends + ['site', 'available_languages'])
+        states={'readonly': Eval('state') != 'draft'},
+        depends=['state', 'site', 'available_languages'])
     origin_article = fields.Many2One(
         'www.article', 'Origin Article', readonly=True, ondelete='SET NULL')
     published_article = fields.Many2One(
@@ -373,6 +393,25 @@ class Article(Workflow, ModelSQL, ModelView):
                     'icon': 'tryton-back',
                     },
                 })
+
+    @classmethod
+    def get_uris(cls, articles, name):
+        URI = Pool().get('www.uri')
+        result = {}
+        for article in articles:
+            article_id = getattr(article, 'id', None)
+            if not article_id:
+                result[article_id] = []
+                continue
+            resource = f'{cls.__name__},{article_id}'
+            result[article_id] = [uri.id for uri in URI.search([
+                        ('resource', '=', resource),
+                    ], order=[('id', 'ASC')])]
+        return result
+
+    @classmethod
+    def set_uris(cls, articles, name, value):
+        pass
 
     @staticmethod
     def _uri_slug(value):
@@ -665,7 +704,7 @@ class Article(Workflow, ModelSQL, ModelView):
     @classmethod
     def write(cls, articles, values, *args):
         values = values.copy()
-        if cls._uri_sync_fields.intersection(values):
+        if ARTICLE_URI_SYNC_FIELDS.intersection(values):
             Page = Pool().get('www.page')
             Lang = Pool().get('ir.lang')
             for article in articles:
@@ -692,7 +731,7 @@ class Article(Workflow, ModelSQL, ModelView):
                             })
                         article.main_uri_language = replacement
         super().write(articles, values, *args)
-        if cls._uri_sync_fields.intersection(values):
+        if ARTICLE_URI_SYNC_FIELDS.intersection(values):
             cls.generate_uri(articles)
 
     @classmethod
@@ -2025,7 +2064,7 @@ class VoyagerURI(metaclass=PoolMeta):
     def _get_resources(cls):
         return super()._get_resources() + [
             'www.page', 'www.file', 'www.article']
-    
+
     @classmethod
     def _sitemap_rows(cls, site):
         rows = super()._sitemap_rows(site)
@@ -2162,21 +2201,3 @@ class ComponentCMS(Component):
             return ElementModel().tag()
         except Exception:
             return None
-
-def _get_valid_component_model_ids():
-    pool = Pool()
-    Model = pool.get('ir.model')
-    model_names = sorted({
-        name for name, klass in pool.iterobject()
-        if issubclass(klass, ComponentCMS)
-    })
-    if not model_names:
-        return []
-    return [model.id for model in Model.search([
-        ('name', 'in', model_names),
-    ])]
-
-
-def _get_valid_models_map(records):
-    model_ids = _get_valid_component_model_ids()
-    return {record.id: model_ids for record in records}

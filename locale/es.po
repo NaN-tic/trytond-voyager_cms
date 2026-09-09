@@ -1,17 +1,10 @@
 #
-# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
-"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
-"PO-Revision-Date: 2026-07-06 11:21+0000\n"
-"Project-Id-Version: \n"
-"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
-"Language: ca_ES\n"
-"Content-Transfer-Encoding: 8bit\n"
-"MIME-Version: 1.0\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "field:www.article,available_languages:"
+msgid "Available Languages"
+msgstr "Idiomas disponibles"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -24,6 +17,22 @@ msgstr "Comentarios"
 msgctxt "field:www.article,image:"
 msgid "Image"
 msgstr "Imagen"
+
+msgctxt "field:www.article,main_uri_language:"
+msgid "Main URI Language"
+msgstr "Idioma URI principal"
+
+msgctxt "field:www.article,origin_article:"
+msgid "Origin Article"
+msgstr "Artículo de origen"
+
+msgctxt "field:www.article,published_article:"
+msgid "Published Article"
+msgstr "Artículo publicado"
+
+msgctxt "field:www.article,published_date:"
+msgid "Publish Date and Time"
+msgstr "Fecha y hora de publicación"
 
 msgctxt "field:www.article,seo_description:"
 msgid "SEO Description"
@@ -52,6 +61,10 @@ msgstr "Título SEO"
 msgctxt "field:www.article,site:"
 msgid "Site"
 msgstr "Sitio"
+
+msgctxt "field:www.article,state:"
+msgid "State"
+msgstr "Estado"
 
 msgctxt "field:www.article,text:"
 msgid "Text"
@@ -329,6 +342,19 @@ msgctxt "model:ir.action,name:act_www_schema"
 msgid "Schemas"
 msgstr "Esquemas"
 
+msgctxt "model:ir.action.act_window.domain,name:act_www_article_domain_all"
+msgid "All"
+msgstr "Todo"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_article_domain_draft"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_article_domain_published"
+msgid "Published"
+msgstr "Publicado"
+
 msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_all"
 msgid "All"
 msgstr "Todo"
@@ -365,7 +391,6 @@ msgstr ""
 "Falta el punto final del contenedor de archivos para la generación de URI de"
 " archivos."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
@@ -378,23 +403,31 @@ msgstr ""
 "Falta el endpoint del contenedor de contenido para generar el URI de la "
 "página."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Por favor, configure un sitio antes de generar URI para la página "
 "\"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr ""
-"Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
+msgstr "Solo se puede seleccionar una URI principal para la página \"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La página publicada \"%(page)s\" no tiene ningún borrador vinculado."
+
+msgctxt "model:ir.model.button,string:www_article_draft_button"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "model:ir.model.button,string:www_article_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
+
+msgctxt "model:ir.model.button,string:www_article_publish_button"
+msgid "Publish"
+msgstr "Publicar"
 
 msgctxt "model:ir.model.button,string:www_comment_approve_button"
 msgid "Approved"
@@ -500,6 +533,14 @@ msgctxt "model:www.site.lang,string:"
 msgid "Www Site Lang"
 msgstr "Idioma sitio web"
 
+msgctxt "selection:www.article,state:"
+msgid "Draft"
+msgstr "Borrador"
+
+msgctxt "selection:www.article,state:"
+msgid "Published"
+msgstr "Publicado"
+
 msgctxt "selection:www.comment,state:"
 msgid "Approved"
 msgstr "Aprobado"
@@ -527,6 +568,14 @@ msgstr "Publicado"
 msgctxt "view:www.article:"
 msgid "Comments"
 msgstr "Comentarios"
+
+msgctxt "view:www.article:"
+msgid "Open Graph"
+msgstr "Open Graph"
+
+msgctxt "view:www.article:"
+msgid "SEO"
+msgstr "SEO"
 
 msgctxt "view:www.article:"
 msgid "Text"

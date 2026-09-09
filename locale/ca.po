@@ -1,17 +1,10 @@
 #
-# SPDX-FileCopyrightText: 2026 juanjo <juanjo.garcia@nan-tic.com>
 msgid ""
-msgstr ""
-"Content-Type: text/plain; charset=UTF-8\n"
-"Last-Translator: juanjo <juanjo.garcia@nan-tic.com>\n"
-"PO-Revision-Date: 2026-07-06 11:21+0000\n"
-"Project-Id-Version: \n"
-"Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
-"Language: ca_ES\n"
-"Content-Transfer-Encoding: 8bit\n"
-"MIME-Version: 1.0\n"
-"Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Lokalize 25.04.0\n"
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "field:www.article,available_languages:"
+msgid "Available Languages"
+msgstr "Idiomes disponibles"
 
 msgctxt "field:www.article,category:"
 msgid "Category"
@@ -24,6 +17,22 @@ msgstr "Comentaris"
 msgctxt "field:www.article,image:"
 msgid "Image"
 msgstr "Imatge"
+
+msgctxt "field:www.article,main_uri_language:"
+msgid "Main URI Language"
+msgstr "Idioma de l'URI principal"
+
+msgctxt "field:www.article,origin_article:"
+msgid "Origin Article"
+msgstr "Article d'origen"
+
+msgctxt "field:www.article,published_article:"
+msgid "Published Article"
+msgstr "Article publicat"
+
+msgctxt "field:www.article,published_date:"
+msgid "Publish Date and Time"
+msgstr "Data i hora de publicació"
 
 msgctxt "field:www.article,seo_description:"
 msgid "SEO Description"
@@ -52,6 +61,10 @@ msgstr "Títol SEO"
 msgctxt "field:www.article,site:"
 msgid "Site"
 msgstr "Lloc web"
+
+msgctxt "field:www.article,state:"
+msgid "State"
+msgstr "Estat"
 
 msgctxt "field:www.article,text:"
 msgid "Text"
@@ -329,6 +342,19 @@ msgctxt "model:ir.action,name:act_www_schema"
 msgid "Schemas"
 msgstr "Esquemes"
 
+msgctxt "model:ir.action.act_window.domain,name:act_www_article_domain_all"
+msgid "All"
+msgstr "Tot"
+
+msgctxt "model:ir.action.act_window.domain,name:act_www_article_domain_draft"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt ""
+"model:ir.action.act_window.domain,name:act_www_article_domain_published"
+msgid "Published"
+msgstr "Publicat"
+
 msgctxt "model:ir.action.act_window.domain,name:act_www_comment_domain_all"
 msgid "All"
 msgstr "Tot"
@@ -365,7 +391,6 @@ msgstr ""
 "Falta el punt final de l'embolcall de fitxers per a la generació de l'URI "
 "del fitxer."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_file_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for file \"%(file)s\"."
 msgstr ""
@@ -376,23 +401,31 @@ msgid "Missing content wrapper endpoint for page URI generation."
 msgstr ""
 "Falta l’endpoint del contenidor de contingut per generar l’URI de la pàgina."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_generate_uri_missing_site"
 msgid "Please set a site before generating URIs for page \"%(page)s\"."
 msgstr ""
 "Si us plau, defineu un lloc abans de generar URI per a la pàgina "
 "\"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_main_uri_unique"
 msgid "Only one main URI can be selected for page \"%(page)s\"."
-msgstr ""
-"Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
+msgstr "Només es pot seleccionar un URI principal per a la pàgina \"%(page)s\"."
 
-#, python-format
 msgctxt "model:ir.message,text:msg_page_missing_draft"
 msgid "The published page \"%(page)s\" has no linked draft."
 msgstr "La pàgina publicada \"%(page)s\" no té cap esborrany vinculat."
+
+msgctxt "model:ir.model.button,string:www_article_draft_button"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "model:ir.model.button,string:www_article_generate_uri_button"
+msgid "Generate URI"
+msgstr "Generar URI"
+
+msgctxt "model:ir.model.button,string:www_article_publish_button"
+msgid "Publish"
+msgstr "Publica"
 
 msgctxt "model:ir.model.button,string:www_comment_approve_button"
 msgid "Approved"
@@ -498,6 +531,14 @@ msgctxt "model:www.site.lang,string:"
 msgid "Www Site Lang"
 msgstr "Idioma del lloc web www"
 
+msgctxt "selection:www.article,state:"
+msgid "Draft"
+msgstr "Esborrany"
+
+msgctxt "selection:www.article,state:"
+msgid "Published"
+msgstr "Publicat"
+
 msgctxt "selection:www.comment,state:"
 msgid "Approved"
 msgstr "Aprovat"
@@ -525,6 +566,14 @@ msgstr "Publicat"
 msgctxt "view:www.article:"
 msgid "Comments"
 msgstr "Comentaris"
+
+msgctxt "view:www.article:"
+msgid "Open Graph"
+msgstr "Open Graph"
+
+msgctxt "view:www.article:"
+msgid "SEO"
+msgstr "SEO"
 
 msgctxt "view:www.article:"
 msgid "Text"
