@@ -5,6 +5,8 @@
     <field name="site"/>
     <label name="category"/>
     <field name="category"/>
+    <label name="author"/>
+    <field name="author"/>
     <label name="image"/>
     <field name="image"/>
     <notebook colspan="4">

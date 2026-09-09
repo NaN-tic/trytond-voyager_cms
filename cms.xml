@@ -60,6 +60,18 @@ this repository contains the full copyright notices and license terms. -->
             <field name="act_window" ref="act_www_article"/>
         </record>
 
+        <!-- www.article.author -->
+        <record model="ir.ui.view" id="www_article_author_view_tree">
+            <field name="model">www.article.author</field>
+            <field name="type">tree</field>
+            <field name="name">article_author_tree</field>
+        </record>
+        <record model="ir.ui.view" id="www_article_author_view_form">
+            <field name="model">www.article.author</field>
+            <field name="type">form</field>
+            <field name="name">article_author_form</field>
+        </record>
+
         <!-- www.article.category -->
         <record model="ir.ui.view" id="www_article_category_view_tree">
             <field name="model">www.article.category</field>
