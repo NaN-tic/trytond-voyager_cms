@@ -7,12 +7,21 @@
     <field name="category"/>
     <label name="image"/>
     <field name="image"/>
+    <label name="state"/>
+    <field name="state"/>
+    <label name="published_date"/>
+    <field name="published_date"/>
+    <group col="-1" colspan="4" id="buttons">
+        <button name="draft"/>
+        <button name="publish"/>
+    </group>
     <notebook colspan="4">
         <page string="Text" id="text">
             <field name="text" colspan="4"/>
         </page>
         <page string="Uris" id="uris">
             <field name="uris" colspan="4" mode="tree,form" height="250"/>
+            <button name="generate_uri" colspan="4"/>
         </page>
         <page string="Comments" id="comments">
             <field name="comments" colspan="4" mode="tree,form" height="300"/>
