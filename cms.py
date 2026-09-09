@@ -1,4 +1,6 @@
 from datetime import date
+import datetime
+import re
 from xml.sax.saxutils import escape
 
 import magic
@@ -283,7 +285,7 @@ class File(DeactivableMixin, ModelSQL, ModelView):
                 URI.delete(duplicates)
 
 
-class Article(ModelSQL, ModelView):
+class Article(Workflow, ModelSQL, ModelView):
     __name__ = 'www.article'
 
     title = fields.Char('Title', required=True, translate=True)
@@ -321,8 +323,392 @@ class Article(ModelSQL, ModelView):
 
     @classmethod
     def set_uris(cls, articles, name, value):
-        # Prevent NotImplementedError for the function One2Many field.
         pass
+
+
+    _readonly_states = {'readonly': Eval('state') != 'draft'}
+    _state_depends = ['state']
+    _uri_sync_fields = {
+        'state', 'title', 'site', 'category', 'main_uri_language',
+    }
+
+    available_languages = fields.Function(
+        fields.Many2Many('ir.lang', None, None, 'Available Languages'),
+        'on_change_with_available_languages')
+    main_uri_language = fields.Many2One(
+        'ir.lang', 'Main URI Language',
+        domain=[('id', 'in', Eval('available_languages', []))],
+        states=_readonly_states,
+        depends=_state_depends + ['site', 'available_languages'])
+    origin_article = fields.Many2One(
+        'www.article', 'Origin Article', readonly=True, ondelete='SET NULL')
+    published_article = fields.Many2One(
+        'www.article', 'Published Article', readonly=True, ondelete='SET NULL')
+    state = fields.Selection([
+            ('draft', 'Draft'),
+            ('published', 'Published'),
+            ], 'State', readonly=True, required=True, sort=False)
+    published_date = fields.DateTime('Publish Date and Time')
+
+    @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls._transitions |= set((
+                ('draft', 'published'),
+                ('published', 'draft'),
+                ))
+        cls._buttons.update({
+                'generate_uri': {
+                    'depends': [],
+                    'icon': 'tryton-forward',
+                    },
+                'publish': {
+                    'invisible': Eval('state') != 'draft',
+                    'depends': ['state'],
+                    'icon': 'tryton-forward',
+                    },
+                'draft': {
+                    'invisible': Eval('state') == 'draft',
+                    'depends': ['state'],
+                    'icon': 'tryton-back',
+                    },
+                })
+
+    @staticmethod
+    def _uri_slug(value):
+        if not value:
+            return None
+        value = value.strip().lower()
+        value = re.sub(r'[\W_]+', '-', value, flags=re.UNICODE)
+        return value.strip('-') or None
+
+    @staticmethod
+    def default_state():
+        return 'draft'
+
+    @fields.depends('site')
+    def on_change_with_available_languages(self, name=None):
+        Page = Pool().get('www.page')
+        Lang = Pool().get('ir.lang')
+        codes = Page._site_lang_codes(self.site)
+        return [lang.id for lang in Lang.search([
+            ('code', 'in', codes),
+        ])]
+
+    @fields.depends('site', 'main_uri_language', 'available_languages')
+    def on_change_site(self):
+        if (self.main_uri_language
+                and self.main_uri_language.id in (
+                    self.available_languages or [])):
+            return
+        if self.site and self.site.main_language:
+            self.main_uri_language = self.site.main_language
+        else:
+            self.main_uri_language = None
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('published')
+    def publish(cls, articles):
+        now = datetime.datetime.now()
+        for article in articles:
+            article.published_date = now
+            old_published_articles = cls._find_published_articles_to_replace(
+                article)
+            if old_published_articles:
+                cls._delete_generated_uris(old_published_articles)
+                cls.delete(old_published_articles)
+        cls.write(articles, {
+                'origin_article': None,
+                'published_article': None,
+                'published_date': now,
+                })
+
+
+    @classmethod
+    def _uri_for_language(cls, article, code, state=None):
+        state = state or article.state or 'draft'
+        prefix = '/draft' if state == 'draft' else ''
+        with Transaction().set_context(language=code):
+            localized_article = cls(article.id)
+            categories = []
+            category = localized_article.category
+            while category:
+                if category.name:
+                    categories.append(category.name)
+                category = category.parent
+            parts = [
+                cls._uri_slug(value)
+                for value in list(reversed(categories)) + [
+                    localized_article.title]
+            ]
+        parts = [part for part in parts if part]
+        if not parts:
+            return None
+        return f'{prefix}/{code}/' + '/'.join(parts)
+
+    @classmethod
+    @ModelView.button
+    def generate_uri(cls, articles):
+        pool = Pool()
+        URI = pool.get('www.uri')
+        Model = pool.get('ir.model')
+        Page = pool.get('www.page')
+        endpoint_model = Model.search(
+            [('name', '=', 'www.article.wrapper')], limit=1)
+        if not endpoint_model:
+            raise UserError(
+                gettext('voyager_cms.msg_page_generate_uri_missing_endpoint'))
+        endpoint = endpoint_model[0]
+        Lang = pool.get('ir.lang')
+
+        for article in articles:
+            if not article.site:
+                raise UserError(
+                    gettext('voyager_cms.msg_page_generate_uri_missing_site',
+                        page=article.rec_name))
+            languages = Page._site_lang_codes(article.site)
+            resource = f'{article.__name__},{article.id}'
+            existing = {
+                uri.language.code: uri
+                for uri in URI.search([
+                    ('resource', '=', resource),
+                    ('site', '=', article.site.id),
+                    ])
+                if uri.language and uri.language.code
+            }
+            new_uris = []
+            for code in languages:
+                language = Lang.search([('code', '=', code)], limit=1)
+                if not language:
+                    continue
+                uri = existing.pop(code, None)
+                uri_value = cls._uri_for_language(article, code)
+                if uri and uri.uri:
+                    uri_value = Page._sync_uri_state_prefix(
+                        uri.uri, article.state or 'draft')
+                if not uri_value:
+                    continue
+                values = {
+                    'resource': resource,
+                    'site': article.site.id,
+                    'uri': uri_value,
+                    'language': language[0].id,
+                    'endpoint': endpoint.id,
+                }
+                if uri:
+                    URI.write([uri], values)
+                else:
+                    uri = URI.create([values])[0]
+                new_uris.append(uri)
+            if existing:
+                URI.delete(list(existing.values()))
+            if not new_uris:
+                continue
+
+            selected_code = (
+                article.main_uri_language.code
+                if article.main_uri_language
+                and article.main_uri_language.code in languages
+                else None)
+            main_uri = next(
+                (uri for uri in new_uris
+                    if selected_code and uri.language.code == selected_code),
+                new_uris[0])
+            URI.write(new_uris, {'main_uri': None})
+            others = [uri for uri in new_uris if uri.id != main_uri.id]
+            if others:
+                URI.write(others, {'main_uri': main_uri.id})
+            if (not article.main_uri_language
+                    or article.main_uri_language.id != main_uri.language.id):
+                # Do not call Article.write here: its URI synchronization hook
+                # would recursively invoke generate_uri.
+                super().write([article], {
+                    'main_uri_language': main_uri.language.id,
+                    })
+
+            new_ids = [uri.id for uri in new_uris]
+            duplicates = URI.search([
+                ('site', '=', article.site.id),
+                ('uri', 'in', [uri.uri for uri in new_uris]),
+                ('id', 'not in', new_ids),
+                ])
+            if duplicates:
+                URI.delete(duplicates)
+
+    @classmethod
+    def _delete_generated_uris(cls, articles):
+        if not articles:
+            return
+        URI = Pool().get('www.uri')
+        resources = [f'{article.__name__},{article.id}'
+            for article in articles if article.id]
+        if resources:
+            uris = URI.search([('resource', 'in', resources)])
+            if uris:
+                URI.delete(uris)
+
+    @classmethod
+    def _snapshot_uris(cls, article):
+        if not getattr(article, 'id', None):
+            return []
+        URI = Pool().get('www.uri')
+        resource = f'{article.__name__},{article.id}'
+        snapshot = []
+        for uri in URI.search([('resource', '=', resource)],
+                order=[('id', 'ASC')]):
+            snapshot.append({
+                'id': uri.id,
+                'uri': uri.uri,
+                'site': uri.site.id if uri.site else None,
+                'language': uri.language.id if uri.language else None,
+                'endpoint': uri.endpoint.id if uri.endpoint else None,
+                'main_uri': uri.main_uri.id if uri.main_uri else None,
+                })
+        return snapshot
+
+    @classmethod
+    def _restore_uris(cls, article, snapshot):
+        if not snapshot:
+            return
+        URI = Pool().get('www.uri')
+        cls._delete_generated_uris([article])
+        resource = f'{article.__name__},{article.id}'
+        created_by_old_id = {}
+        main_links = []
+        for row in snapshot:
+            created = URI.create([{
+                'resource': resource,
+                'uri': row['uri'],
+                'site': row['site'],
+                'language': row['language'],
+                'endpoint': row['endpoint'],
+                }])[0]
+            created_by_old_id[row['id']] = created
+            if row['main_uri']:
+                main_links.append((created, row['main_uri']))
+        for created, old_main_id in main_links:
+            main_uri = created_by_old_id.get(old_main_id)
+            if main_uri:
+                URI.write([created], {'main_uri': main_uri.id})
+
+    @classmethod
+    def _find_published_articles_to_replace(cls, article):
+        if article.published_article:
+            return [article.published_article]
+        if not getattr(article, 'id', None) or not article.site:
+            return []
+        published = cls.search([
+            ('origin_article', '=', article.id),
+            ('state', '=', 'published'),
+            ])
+        if published:
+            return published
+        Page = Pool().get('www.page')
+        target_uris = [
+            cls._uri_for_language(article, code, state='published')
+            for code in Page._site_lang_codes(article.site)
+        ]
+        target_uris = [uri for uri in target_uris if uri]
+        if not target_uris:
+            return []
+        URI = Pool().get('www.uri')
+        resource = f'{article.__name__},{article.id}'
+        uris = URI.search([
+            ('site', '=', article.site.id),
+            ('resource', '!=', resource),
+            ('uri', 'in', target_uris),
+            ])
+        ids = set()
+        for uri in uris:
+            resource = uri.resource
+            if isinstance(resource, str):
+                if resource.startswith(f'{cls.__name__},'):
+                    try:
+                        ids.add(int(resource.split(',', 1)[1]))
+                    except (TypeError, ValueError):
+                        continue
+            else:
+                try:
+                    model_name, record_id = resource
+                except Exception:
+                    continue
+                if model_name == cls.__name__:
+                    ids.add(record_id)
+        return cls.search([
+            ('id', 'in', list(ids)),
+            ('state', '=', 'published'),
+            ]) if ids else []
+
+    @classmethod
+    def _freeze_published_copy(cls, article):
+        if article.origin_article and article.origin_article.state == 'draft':
+            return article
+        old_published = cls._find_published_articles_to_replace(article)
+        if old_published:
+            cls._delete_generated_uris(old_published)
+            cls.delete(old_published)
+        published, = cls.copy([article], default={
+            'state': 'published',
+            'origin_article': article.id,
+            'published_article': None,
+            })
+        cls.generate_uri([published])
+        cls.write([article], {'published_article': published.id})
+        return published
+
+    @classmethod
+    def delete(cls, articles):
+        cls._delete_generated_uris(articles)
+        super().delete(articles)
+
+    @classmethod
+    def write(cls, articles, values, *args):
+        values = values.copy()
+        if cls._uri_sync_fields.intersection(values):
+            Page = Pool().get('www.page')
+            Lang = Pool().get('ir.lang')
+            for article in articles:
+                site = article.site
+                if not site:
+                    continue
+                codes = Page._site_lang_codes(site)
+                current = article.main_uri_language
+                if current and current.code not in codes:
+                    replacement = (
+                        site.main_language
+                        if site.main_language
+                        and site.main_language.code in codes
+                        else None)
+                    if not replacement:
+                        languages = Lang.search(
+                            [('code', 'in', codes)],
+                            order=[('id', 'ASC')],
+                            limit=1)
+                        replacement = languages[0] if languages else None
+                    if replacement:
+                        super().write([article], {
+                            'main_uri_language': replacement.id,
+                            })
+                        article.main_uri_language = replacement
+        super().write(articles, values, *args)
+        if cls._uri_sync_fields.intersection(values):
+            cls.generate_uri(articles)
+
+    @classmethod
+    @ModelView.button
+    @Workflow.transition('draft')
+    def draft(cls, articles):
+        for article in articles:
+            uri_snapshot = cls._snapshot_uris(article)
+            if article.state != 'draft':
+                cls.write([article], {'state': 'draft'})
+                try:
+                    article.state = 'draft'
+                except Exception:
+                    pass
+            published = cls._freeze_published_copy(article)
+            cls._restore_uris(published, uri_snapshot)
 
 
 class ArticleCategory(tree(separator=' / '), ModelSQL, ModelView):
@@ -1776,3 +2162,21 @@ class ComponentCMS(Component):
             return ElementModel().tag()
         except Exception:
             return None
+
+def _get_valid_component_model_ids():
+    pool = Pool()
+    Model = pool.get('ir.model')
+    model_names = sorted({
+        name for name, klass in pool.iterobject()
+        if issubclass(klass, ComponentCMS)
+    })
+    if not model_names:
+        return []
+    return [model.id for model in Model.search([
+        ('name', 'in', model_names),
+    ])]
+
+
+def _get_valid_models_map(records):
+    model_ids = _get_valid_component_model_ids()
+    return {record.id: model_ids for record in records}
