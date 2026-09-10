@@ -71,6 +71,20 @@ this repository contains the full copyright notices and license terms. -->
             <field name="type">form</field>
             <field name="name">article_author_form</field>
         </record>
+        <record model="ir.action.act_window" id="act_www_article_author">
+            <field name="name">Author</field>
+            <field name="res_model">www.article.author</field>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_article_author_view1">
+            <field name="sequence" eval="10"/>
+            <field name="view" ref="www_article_author_view_tree"/>
+            <field name="act_window" ref="act_www_article_author"/>
+        </record>
+        <record model="ir.action.act_window.view" id="act_www_article_author_view2">
+            <field name="sequence" eval="20"/>
+            <field name="view" ref="www_article_author_view_form"/>
+            <field name="act_window" ref="act_www_article_author"/>
+        </record>
 
         <!-- www.article.category -->
         <record model="ir.ui.view" id="www_article_category_view_tree">
@@ -331,5 +345,7 @@ this repository contains the full copyright notices and license terms. -->
             name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
         <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema"/>
+        <menuitem parent="menu_voyager_cms" action="act_www_article_author"
+            name="Authors" id="menu_www_article_author" sequence="4"/>
     </data>
 </tryton>
