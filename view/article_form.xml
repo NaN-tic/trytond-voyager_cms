@@ -11,7 +11,6 @@
     <field name="category"/>
     <label name="image"/>
     <field name="image"/>
-    <newline/>
     <label name="state"/>
     <field name="state"/>
     <label name="published_date"/>
