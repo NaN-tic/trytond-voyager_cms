@@ -314,7 +314,7 @@ class Article(ModelSQL, ModelView):
         pass
 
 
-class ArticleAuthor(ModelSQL, ModelView):
+class ArticleAuthor(DeactivableMixin, ModelSQL, ModelView):
     __name__ = 'www.article.author'
 
     name = fields.Char('Name', required=True)

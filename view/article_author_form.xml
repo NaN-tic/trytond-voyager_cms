@@ -1,4 +1,8 @@
 <form>
     <label name="name"/>
     <field name="name"/>
+    <group id="checkboxes" colspan="2">
+        <label name="active"/>
+        <field name="active"/>
+    </group>
 </form>
