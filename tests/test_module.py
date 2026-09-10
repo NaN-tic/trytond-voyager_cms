@@ -51,6 +51,73 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(Article._fields['comments'].model_name, 'www.comment')
 
     @with_transaction()
+    def test_article_active_synchronizes_copies_and_uris(self):
+        pool = Pool()
+        Site = pool.get('www.site')
+        Article = pool.get('www.article')
+        URI = pool.get('www.uri')
+        Model = pool.get('ir.model')
+
+        with patch.object(Site.type, 'selection', [('test', 'Test')]):
+            site, = Site.create([{
+                        'name': 'Test',
+                        'type': 'test',
+                        'url': 'https://example.com',
+                        }])
+        draft, unrelated = Article.create([
+                {'title': title, 'site': site.id}
+                for title in ['Article', 'Unrelated']])
+        published, = Article.copy([draft], default={
+                'state': 'published',
+                'origin_article': draft.id,
+                })
+        Article.write([draft], {'published_article': published.id})
+        endpoint, = Model.search([('name', '=', 'www.article.wrapper')])
+        articles = [draft, published, unrelated]
+        uris = URI.create([{
+                    'site': site.id,
+                    'uri': '/article-%s' % article.id,
+                    'endpoint': endpoint.id,
+                    'resource': str(article),
+                    } for article in articles])
+        article_ids = [article.id for article in articles]
+        uri_ids = [uri.id for uri in uris]
+
+        for source, restore in [(draft, published), (published, draft)]:
+            with self.subTest(source=source.state):
+                Article.write([source], {'active': False})
+
+                self.assertEqual(
+                    Article.search([('id', 'in', article_ids)]), [unrelated])
+                self.assertEqual(
+                    URI.search([('id', 'in', uri_ids)]), [uris[2]])
+                self.assertEqual(
+                    {row['id']: row['active'] for row in Article.read(
+                            article_ids, ['active'])},
+                    {draft.id: False, published.id: False, unrelated.id: True})
+                self.assertEqual(
+                    {row['id']: row['active']
+                        for row in URI.read(uri_ids, ['active'])},
+                    {uris[0].id: False, uris[1].id: False, uris[2].id: True})
+                self.assertFalse(site.check_request_uri(uris[1]))
+
+                Article.write([restore], {'active': True})
+
+                self.assertEqual(
+                    set(Article.search([('id', 'in', article_ids)])),
+                    set(articles))
+                self.assertEqual(
+                    set(URI.search([('id', 'in', uri_ids)])), set(uris))
+                self.assertTrue(site.check_request_uri(uris[1]))
+                self.assertEqual(
+                    {row['id']: row['state'] for row in Article.read(
+                            article_ids, ['state'])},
+                    {draft.id: 'draft', published.id: 'published',
+                        unrelated.id: 'draft'})
+                self.assertEqual(draft.published_article, published)
+                self.assertEqual(published.origin_article, draft)
+
+    @with_transaction()
     def test_article_delete_removes_only_its_comments(self):
         pool = Pool()
         Site = pool.get('www.site')

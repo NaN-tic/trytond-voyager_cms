@@ -311,7 +311,7 @@ class File(DeactivableMixin, ModelSQL, ModelView):
                 URI.delete(duplicates)
 
 
-class Article(Workflow, ModelSQL, ModelView):
+class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     __name__ = 'www.article'
 
     @classmethod
@@ -736,6 +736,35 @@ class Article(Workflow, ModelSQL, ModelView):
                             })
                         article.main_uri_language = replacement
         super().write(articles, values, *args)
+        actions = iter((articles, values) + args)
+        for records, changes in zip(actions, actions):
+            if 'active' not in changes:
+                continue
+            # Follow both directions, including inactive copies when restoring.
+            with Transaction().set_context(active_test=False):
+                related = set(records)
+                pending = set(records)
+                while pending:
+                    ids = [record.id for record in pending]
+                    linked = cls.search(['OR',
+                        ('origin_article', 'in', ids),
+                        ('published_article', 'in', ids),
+                        ])
+                    linked = set(linked)
+                    for record in pending:
+                        if record.origin_article:
+                            linked.add(record.origin_article)
+                        if record.published_article:
+                            linked.add(record.published_article)
+                    pending = linked - related
+                    related.update(pending)
+                super().write(list(related), {'active': changes['active']})
+                URI = Pool().get('www.uri')
+                uris = URI.search([
+                    ('resource', 'in', [str(record) for record in related]),
+                    ])
+                if uris:
+                    URI.write(uris, {'active': changes['active']})
         if ARTICLE_URI_SYNC_FIELDS.intersection(values):
             cls.generate_uri(articles)
 
@@ -2168,6 +2197,8 @@ class VoyagerSite(metaclass=PoolMeta):
 
         resource = voyager_uri.resource
         resource_model = getattr(resource, '__name__', None)
+        if resource_model == 'www.article':
+            return resource.active
         if resource_model == 'www.page':
             return self._allow_page_state_in_environment(
                 resource, web_prefix)
