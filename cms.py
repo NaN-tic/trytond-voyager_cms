@@ -340,6 +340,8 @@ class Article(Workflow, ModelSQL, ModelView):
         ondelete='CASCADE')
     category = fields.Many2One('www.article.category', 'Category',
         ondelete='SET NULL')
+    author = fields.Many2One('www.article.author', 'Author',
+        ondelete='SET NULL')
     text = fields.Text('Text', translate=True)
     image = fields.Many2One('www.file', 'Image', ondelete='SET NULL')
     uris = fields.Function(fields.One2Many('www.uri', None, 'URIs'),
@@ -740,6 +742,12 @@ class Article(Workflow, ModelSQL, ModelView):
                     pass
             published = cls._freeze_published_copy(article)
             cls._restore_uris(published, uri_snapshot)
+
+
+class ArticleAuthor(DeactivableMixin, ModelSQL, ModelView):
+    __name__ = 'www.article.author'
+
+    name = fields.Char('Name', required=True)
 
 
 class ArticleCategory(tree(separator=' / '), ModelSQL, ModelView):
