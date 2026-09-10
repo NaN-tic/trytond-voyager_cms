@@ -2049,6 +2049,15 @@ class FileWrapper(Endpoint):
         return response
 
 
+class ArticleWrapper(Endpoint):
+    __name__ = 'www.article.wrapper'
+    _url = '/article-wrapper'
+    _type = []
+
+    def render(self):
+        raise NotImplementedError
+
+
 class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
