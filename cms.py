@@ -698,6 +698,11 @@ class Article(Workflow, ModelSQL, ModelView):
 
     @classmethod
     def delete(cls, articles):
+        Comment = Pool().get('www.comment')
+        comments = Comment.search([
+            ('origin', 'in', [str(article) for article in articles]),
+            ])
+        Comment.delete(comments)
         cls._delete_generated_uris(articles)
         super().delete(articles)
 

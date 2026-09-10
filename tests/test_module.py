@@ -51,6 +51,45 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(Article._fields['comments'].model_name, 'www.comment')
 
     @with_transaction()
+    def test_article_delete_removes_only_its_comments(self):
+        pool = Pool()
+        Site = pool.get('www.site')
+        Article = pool.get('www.article')
+        Comment = pool.get('www.comment')
+
+        with patch.object(Site.type, 'selection', [('test', 'Test')]):
+            site, = Site.create([{
+                        'name': 'Test',
+                        'type': 'test',
+                        'url': 'https://example.com',
+                        }])
+        first, second, kept = Article.create([
+                {'title': title, 'site': site.id}
+                for title in ['First', 'Second', 'Kept']])
+        comment, other_comment, kept_comment = Comment.create([
+                {'origin': str(article), 'text': 'Comment', 'state': state}
+                for article, state in [
+                    (first, 'approved'),
+                    (second, 'not_approved'),
+                    (kept, 'draft'),
+                    ]])
+        reply, = Comment.create([{
+                    'origin': str(first),
+                    'text': 'Reply',
+                    'in_reply_to': comment.id,
+                    }])
+        comment_ids = [
+            comment.id, other_comment.id, kept_comment.id, reply.id]
+        article_ids = [first.id, second.id, kept.id]
+
+        Article.delete([first, second])
+
+        self.assertEqual(
+            Comment.search([('id', 'in', comment_ids)]), [kept_comment])
+        self.assertEqual(
+            Article.search([('id', 'in', article_ids)]), [kept])
+
+    @with_transaction()
     def test_article_category_model_defines_expected_fields(self):
         ArticleCategory = Pool().get('www.article.category')
 
