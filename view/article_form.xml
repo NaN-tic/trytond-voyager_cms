@@ -1,6 +1,10 @@
 <form>
     <label name="title"/>
     <field name="title"/>
+    <group id="checkboxes" colspan="2">
+        <label name="active"/>
+        <field name="active"/>
+    </group>
     <label name="site"/>
     <field name="site"/>
     <label name="category"/>
