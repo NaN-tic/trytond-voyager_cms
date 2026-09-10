@@ -92,12 +92,13 @@ class VoyagerCmsTestCase(ModuleTestCase):
                 self.assertEqual(
                     URI.search([('id', 'in', uri_ids)]), [uris[2]])
                 self.assertEqual(
-                    [row['active'] for row in Article.read(
-                            article_ids, ['active'])],
-                    [False, False, True])
+                    {row['id']: row['active'] for row in Article.read(
+                            article_ids, ['active'])},
+                    {draft.id: False, published.id: False, unrelated.id: True})
                 self.assertEqual(
-                    [row['active'] for row in URI.read(uri_ids, ['active'])],
-                    [False, False, True])
+                    {row['id']: row['active']
+                        for row in URI.read(uri_ids, ['active'])},
+                    {uris[0].id: False, uris[1].id: False, uris[2].id: True})
                 self.assertFalse(site.check_request_uri(uris[1]))
 
                 Article.write([restore], {'active': True})
@@ -109,9 +110,10 @@ class VoyagerCmsTestCase(ModuleTestCase):
                     set(URI.search([('id', 'in', uri_ids)])), set(uris))
                 self.assertTrue(site.check_request_uri(uris[1]))
                 self.assertEqual(
-                    [row['state'] for row in Article.read(
-                            article_ids, ['state'])],
-                    ['draft', 'published', 'draft'])
+                    {row['id']: row['state'] for row in Article.read(
+                            article_ids, ['state'])},
+                    {draft.id: 'draft', published.id: 'published',
+                        unrelated.id: 'draft'})
                 self.assertEqual(draft.published_article, published)
                 self.assertEqual(published.origin_article, draft)
 
