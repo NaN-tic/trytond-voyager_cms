@@ -1,4 +1,6 @@
 <tree>
     <field name="name"/>
     <field name="state"/>
+    <button name="draft" tree_invisible="1"/>
+    <button name="publish" tree_invisible="1"/>
 </tree>
