@@ -8,6 +8,7 @@ def register():
     Pool.register(
         cms.File,
         cms.Article,
+        cms.ArticleAuthor,
         cms.ArticleCategory,
         cms.Comment,
         cms.Page,
