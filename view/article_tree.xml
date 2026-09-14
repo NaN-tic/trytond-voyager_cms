@@ -1,4 +1,5 @@
 <tree>
     <field name="title"/>
     <field name="site"/>
+    <field name="author" optional="1"/>
 </tree>
