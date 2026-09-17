@@ -722,6 +722,12 @@ class VoyagerCmsTestCase(ModuleTestCase):
              '/draft/es/hello-world'])
 
     @with_transaction()
+    def test_article_uri_slug_uses_slugify(self):
+        Article = Pool().get('www.article')
+
+        self.assertEqual(Article._uri_slug('Cafè & tea / 100%'), 'cafe-tea-100')
+
+    @with_transaction()
     def test_page_uris_field_is_editable_in_draft(self):
         Page = Pool().get('www.page')
 
@@ -1137,6 +1143,9 @@ class VoyagerCmsTestCase(ModuleTestCase):
         self.assertEqual(
             Page._uri_from_name('Hello World', 'es', state='draft'),
             '/draft/es/hello-world')
+        self.assertEqual(
+            Page._uri_from_name('Cafè & tea / 100%', 'es'),
+            '/es/cafe-tea-100')
 
     @with_transaction()
     def test_state_uri_prefix_is_generic(self):

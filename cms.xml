@@ -368,12 +368,13 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <menuitem id="menu_voyager_cms" name="Web Content Manager" sequence="210"/>
+        <menuitem parent="menu_voyager_cms" id="menu_voyager_cms_configuration" name="Configuration" icon="tryton-settings" sequence="0"/>
+        <menuitem parent="menu_voyager_cms_configuration" action="act_www_article_author" name="Authors" id="menu_www_article_author" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_file" name="Files" id="menu_www_file" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_page" name="Pages" id="menu_www_page" sequence="20"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component" sequence="30"/>
         <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema" sequence="40"/>
         <menuitem parent="menu_voyager_cms" action="act_www_article" name="Articles" id="menu_www_article" sequence="50"/>
-        <menuitem parent="menu_www_article" action="act_www_article_author" name="Authors" id="menu_www_article_author" sequence="10"/>
         <menuitem parent="menu_www_article" action="act_www_article_category" name="Article Categories" id="menu_www_article_category" sequence="20"/>
         <menuitem parent="menu_www_article" action="act_www_comment" name="Comments" id="menu_www_comment" sequence="30"/>
     </data>
