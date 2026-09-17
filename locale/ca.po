@@ -2,6 +2,10 @@
 msgid ""
 msgstr "Content-Type: text/plain; charset=utf-8\n"
 
+msgctxt "field:www.article,author:"
+msgid "Author"
+msgstr "Autor"
+
 msgctxt "field:www.article,available_languages:"
 msgid "Available Languages"
 msgstr "Idiomes disponibles"
@@ -77,6 +81,10 @@ msgstr "Títol"
 msgctxt "field:www.article,uris:"
 msgid "URIs"
 msgstr "URIs"
+
+msgctxt "field:www.article.author,name:"
+msgid "Name"
+msgstr "Nom"
 
 msgctxt "field:www.article.category,childs:"
 msgid "Childs"
@@ -318,6 +326,10 @@ msgctxt "model:ir.action,name:act_www_article"
 msgid "Articles"
 msgstr "Articles"
 
+msgctxt "model:ir.action,name:act_www_article_author"
+msgid "Author"
+msgstr "Autor"
+
 msgctxt "model:ir.action,name:act_www_article_category"
 msgid "Article Categories"
 msgstr "Categories d'articles"
@@ -463,6 +475,10 @@ msgctxt "model:ir.ui.menu,name:menu_www_article"
 msgid "Articles"
 msgstr "Articles"
 
+msgctxt "model:ir.ui.menu,name:menu_www_article_author"
+msgid "Authors"
+msgstr "Autors"
+
 msgctxt "model:ir.ui.menu,name:menu_www_article_category"
 msgid "Article Categories"
 msgstr "Categories d'articles"
@@ -495,9 +511,17 @@ msgctxt "model:www.article,string:"
 msgid "Www Article"
 msgstr "Article WWW"
 
+msgctxt "model:www.article.author,string:"
+msgid "Www Article Author"
+msgstr "Autor del article WWW"
+
 msgctxt "model:www.article.category,string:"
 msgid "Www Article Category"
 msgstr "Categoria d'articles WWW"
+
+msgctxt "model:www.article.wrapper,string:"
+msgid "Www Article Wrapper"
+msgstr "Contenidor d'articles www"
 
 msgctxt "model:www.comment,string:"
 msgid "Www Comment"
