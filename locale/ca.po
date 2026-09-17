@@ -468,8 +468,8 @@ msgid "Publish"
 msgstr "Publica"
 
 msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
-msgid "Voyager CMS"
-msgstr "Voyager CMS"
+msgid "Web Content Manager"
+msgstr "Gestor de continguts web"
 
 msgctxt "model:ir.ui.menu,name:menu_www_article"
 msgid "Articles"

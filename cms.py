@@ -313,6 +313,7 @@ class File(DeactivableMixin, ModelSQL, ModelView):
 
 class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     __name__ = 'www.article'
+    _rec_name = 'title'
 
     @classmethod
     def __register__(cls, module_name):
