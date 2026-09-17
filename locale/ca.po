@@ -646,3 +646,8 @@ msgstr "Composició de títol SEO"
 msgctxt "xgettext:x:"
 msgid "Page not found"
 msgstr "Pàgina no trobada"
+
+msgctxt "model:ir.ui.menu,name:menu_voyager_cms_configuration"
+msgid "Configuration"
+msgstr "Configuració"
+
