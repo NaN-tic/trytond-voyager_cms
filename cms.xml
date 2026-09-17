@@ -368,6 +368,12 @@ this repository contains the full copyright notices and license terms. -->
         </record>
 
         <menuitem id="menu_voyager_cms" name="Voyager CMS" sequence="210"/>
+        <menuitem parent="menu_voyager_cms"
+            id="menu_voyager_cms_configuration" name="Configuration"
+            sequence="0"/>
+        <menuitem parent="menu_voyager_cms_configuration"
+            action="act_www_article_author" name="Authors"
+            id="menu_www_article_author" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_file"
             name="Files" id="menu_www_file" sequence="5"/>
         <menuitem parent="menu_voyager_cms" name="Article"
@@ -382,7 +388,5 @@ this repository contains the full copyright notices and license terms. -->
             name="Pages" id="menu_www_page" sequence="10"/>
         <menuitem parent="menu_voyager_cms" action="act_www_component" id="menu_www_component"/>
         <menuitem parent="menu_voyager_cms" action="act_www_schema" id="menu_www_schema"/>
-        <menuitem parent="menu_voyager_cms" action="act_www_article_author"
-            name="Authors" id="menu_www_article_author" sequence="4"/>
     </data>
 </tryton>
