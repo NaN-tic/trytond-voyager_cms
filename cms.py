@@ -1,6 +1,5 @@
 from datetime import date
 import datetime
-import re
 from xml.sax.saxutils import escape
 
 import magic
@@ -18,6 +17,7 @@ from trytond.model import (
     sequence_ordered, tree)
 from trytond.pool import Pool, PoolMeta
 from trytond.i18n import gettext
+from trytond.modules.voyager import slugify
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
@@ -313,6 +313,7 @@ class File(DeactivableMixin, ModelSQL, ModelView):
 
 class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     __name__ = 'www.article'
+    _rec_name = 'title'
 
     @classmethod
     def __register__(cls, module_name):
@@ -419,9 +420,7 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     def _uri_slug(value):
         if not value:
             return None
-        value = value.strip().lower()
-        value = re.sub(r'[\W_]+', '-', value, flags=re.UNICODE)
-        return value.strip('-') or None
+        return slugify(value) or None
 
     @staticmethod
     def default_state():
@@ -1208,7 +1207,7 @@ class Page(Workflow, ModelSQL, ModelView):
     def _uri_from_name(cls, name, code, state='published'):
         if not name:
             return None
-        base = name.lower().replace(' ', '-').replace('/', '-')
+        base = slugify(name)
         if not base:
             return None
         prefix = cls._state_uri_prefix(state)

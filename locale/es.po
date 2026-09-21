@@ -470,8 +470,8 @@ msgid "Publish"
 msgstr "Publicar"
 
 msgctxt "model:ir.ui.menu,name:menu_voyager_cms"
-msgid "Voyager CMS"
-msgstr "Voyager CMS"
+msgid "Web Content Manager"
+msgstr "Gestor de contenidos web"
 
 msgctxt "model:ir.ui.menu,name:menu_www_article"
 msgid "Articles"
@@ -648,3 +648,7 @@ msgstr "Composición de títulos SEO"
 msgctxt "xgettext:x:"
 msgid "Page not found"
 msgstr "Página no encontrada"
+
+msgctxt "model:ir.ui.menu,name:menu_voyager_cms_configuration"
+msgid "Configuration"
+msgstr "Configuración"
