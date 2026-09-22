@@ -2,4 +2,5 @@
     <field name="name"/>
     <field name="site"/>
     <field name="uri"/>
+    <button name="generate_uri" multiple="1"/>
 </tree>
