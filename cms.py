@@ -451,8 +451,9 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     @Workflow.transition('published')
     def publish(cls, articles):
         now = datetime.datetime.now()
+        undated_articles = [
+            article for article in articles if not article.published_date]
         for article in articles:
-            article.published_date = now
             old_published_articles = cls._find_published_articles_to_replace(
                 article)
             if old_published_articles:
@@ -461,8 +462,9 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
         cls.write(articles, {
                 'origin_article': None,
                 'published_article': None,
-                'published_date': now,
                 })
+        if undated_articles:
+            cls.write(undated_articles, {'published_date': now})
 
 
     @classmethod
