@@ -16,8 +16,8 @@
     <label name="state"/>
     <field name="state"/>
     <label name="published_date"/>
-    <field name="published_date"/>
-    <group col="-1" colspan="4" id="buttons">
+    <group col="-1" id="buttons">
+        <field name="published_date"/>
         <button name="draft"/>
         <button name="publish"/>
     </group>
