@@ -1,36 +1,37 @@
-<form>
+<form col="6">
     <label name="title"/>
     <field name="title"/>
+    <label name="site"/>
+    <field name="site"/>
     <group id="checkboxes" colspan="2">
         <label name="active"/>
         <field name="active"/>
     </group>
-    <label name="site"/>
-    <field name="site"/>
     <label name="category"/>
     <field name="category"/>
     <label name="author"/>
     <field name="author"/>
     <label name="image"/>
     <field name="image"/>
+    <newline/>
     <label name="state"/>
     <field name="state"/>
     <label name="published_date"/>
-    <group col="-1" id="buttons">
-        <field name="published_date"/>
+    <field name="published_date"/>
+    <group col="-1" colspan="2" id="buttons">
         <button name="draft"/>
         <button name="publish"/>
     </group>
-    <notebook colspan="4">
+    <notebook colspan="6">
         <page string="Text" id="text">
-            <field name="text" colspan="4" height="500"/>
+            <field name="text" colspan="4" height="550"/>
         </page>
         <page string="Uris" id="uris">
-            <field name="uris" colspan="4" mode="tree,form" height="400"/>
+            <field name="uris" colspan="4" mode="tree,form" height="450"/>
             <button name="generate_uri" colspan="4"/>
         </page>
         <page string="Comments" id="comments">
-            <field name="comments" colspan="4" mode="tree,form" height="400"/>
+            <field name="comments" colspan="4" mode="tree,form" height="450"/>
         </page>
     </notebook>
 </form>
