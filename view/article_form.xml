@@ -23,14 +23,14 @@
     </group>
     <notebook colspan="4">
         <page string="Text" id="text">
-            <field name="text" colspan="4"/>
+            <field name="text" colspan="4" height="500"/>
         </page>
         <page string="Uris" id="uris">
-            <field name="uris" colspan="4" mode="tree,form" height="250"/>
+            <field name="uris" colspan="4" mode="tree,form" height="400"/>
             <button name="generate_uri" colspan="4"/>
         </page>
         <page string="Comments" id="comments">
-            <field name="comments" colspan="4" mode="tree,form" height="300"/>
+            <field name="comments" colspan="4" mode="tree,form" height="400"/>
         </page>
         <page string="SEO" id="seo">
             <label name="seo_title"/>
