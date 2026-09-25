@@ -1634,16 +1634,23 @@ class VoyagerURI(metaclass=PoolMeta):
     @classmethod
     def _sitemap_where(cls, table, site):
         pool = Pool()
+        Article = pool.get('www.article')
         Page = pool.get('www.page')
+
+        article = Article.__table__()
         page = Page.__table__()
 
         where = super()._sitemap_where(table, site)
+        draft_articles = article.select(
+            Concat(Article.__name__ + ',', Cast(article.id, 'TEXT')),
+            where=article.state == 'draft')
         draft_pages = page.select(
             Concat(Page.__name__ + ',', Cast(page.id, 'TEXT')),
             where=page.state == 'draft')
 
         return where & (
             (table.resource == None)
+            | ~table.resource.in_(draft_articles)
             | ~table.resource.in_(draft_pages)
         )
 
