@@ -6,8 +6,8 @@ from xml.sax.saxutils import escape
 import magic
 from dominate.tags import div
 from dominate.util import raw
-from sql import Table
-from sql.operators import Exists
+from sql import Cast, Table
+from sql.operators import Concat, Exists
 from werkzeug.wrappers import Response
 from trytond import backend
 from trytond.exceptions import UserError
@@ -17,7 +17,7 @@ from trytond.model import (
     DeactivableMixin, ModelSQL, ModelView, Workflow, fields,
     sequence_ordered, tree)
 from trytond.pool import Pool, PoolMeta
-from trytond.i18n import gettext
+from trytond.i18n import gettext, lazy_gettext
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
 from trytond.transaction import Transaction
@@ -1095,6 +1095,7 @@ class Page(Workflow, ModelSQL, ModelView):
                     'endpoint': (
                         uri.endpoint.id if getattr(uri, 'endpoint', None)
                         else None),
+                    'show_sitemap': uri.show_sitemap,
                     'main_uri': (
                         uri.main_uri.id if getattr(uri, 'main_uri', None)
                         else None),
@@ -1118,6 +1119,7 @@ class Page(Workflow, ModelSQL, ModelView):
                 'site': row['site'],
                 'language': row['language'],
                 'endpoint': row['endpoint'],
+                'show_sitemap': row['show_sitemap'],
             }
             created, = URI.create([values])
             created_by_old_id[row['id']] = created
@@ -2099,41 +2101,37 @@ class VoyagerURI(metaclass=PoolMeta):
     __name__ = 'www.uri'
 
     @classmethod
+    def __setup__(cls):
+        super().__setup__()
+        cls.show_sitemap.help = lazy_gettext('voyager_cms.msg_help_uri_show_sitemap')
+
+    @classmethod
+    def _sitemap_where(cls, table, site):
+        pool = Pool()
+        Article = pool.get('www.article')
+        Page = pool.get('www.page')
+
+        article = Article.__table__()
+        page = Page.__table__()
+
+        where = super()._sitemap_where(table, site)
+        draft_articles = article.select(
+            Concat(Article.__name__ + ',', Cast(article.id, 'TEXT')),
+            where=article.state == 'draft')
+        draft_pages = page.select(
+            Concat(Page.__name__ + ',', Cast(page.id, 'TEXT')),
+            where=page.state == 'draft')
+
+        return where & (
+            (table.resource == None)
+            | ~table.resource.in_(draft_articles)
+            | ~table.resource.in_(draft_pages)
+        )
+
+    @classmethod
     def _get_resources(cls):
         return super()._get_resources() + [
             'www.page', 'www.file', 'www.article']
-
-    @classmethod
-    def _sitemap_rows(cls, site):
-        rows = super()._sitemap_rows(site)
-        if not rows:
-            return rows
-
-        page_rows = {}
-        for row in rows:
-            resource = row.get('resource')
-            if not resource or not resource.startswith('www.page,'):
-                continue
-            _, _, raw_id = resource.partition(',')
-            try:
-                page_rows[row['id']] = int(raw_id)
-            except (TypeError, ValueError):
-                continue
-        if not page_rows:
-            return rows
-
-        Page = Pool().get('www.page')
-        published_ids = {
-            page.id for page in Page.search([
-                    ('id', 'in', list(page_rows.values())),
-                    ('state', '=', 'published'),
-                ])
-        }
-        return [
-            row for row in rows
-            if row['id'] not in page_rows
-            or page_rows[row['id']] in published_ids
-        ]
 
 
 class VoyagerMenu(metaclass=PoolMeta):
