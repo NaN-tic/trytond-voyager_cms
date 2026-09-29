@@ -20,7 +20,7 @@ from trytond.i18n import gettext, lazy_gettext
 from trytond.modules.voyager import slugify
 from trytond.modules.voyager.voyager import Component, Endpoint, VoyagerContext
 from trytond.pyson import Bool, Eval
-from trytond.transaction import Transaction
+from trytond.transaction import Transaction, without_check_access
 from trytond.url import http_host
 
 PAGE_STATES = {'readonly': Eval('state') != 'draft'}
@@ -366,7 +366,8 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     origin_article = fields.Many2One(
         'www.article', 'Origin Article', readonly=True, ondelete='SET NULL')
     published_article = fields.Many2One(
-        'www.article', 'Published Article', readonly=True, ondelete='SET NULL')
+        'www.article', 'Published Article', states={'editable': False},
+        ondelete='SET NULL')
     state = fields.Selection([
             ('draft', 'Draft'),
             ('published', 'Published'),
@@ -565,9 +566,10 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
                     or article.main_uri_language.id != main_uri.language.id):
                 # Do not call Article.write here: its URI synchronization hook
                 # would recursively invoke generate_uri.
-                super().write([article], {
-                    'main_uri_language': main_uri.language.id,
-                    })
+                with without_check_access():
+                    super().write([article], {
+                        'main_uri_language': main_uri.language.id,
+                        })
 
             new_ids = [uri.id for uri in new_uris]
             duplicates = URI.search([
@@ -734,9 +736,10 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
                             limit=1)
                         replacement = languages[0] if languages else None
                     if replacement:
-                        super().write([article], {
-                            'main_uri_language': replacement.id,
-                            })
+                        with without_check_access():
+                            super().write([article], {
+                                'main_uri_language': replacement.id,
+                                })
                         article.main_uri_language = replacement
         super().write(articles, values, *args)
         actions = iter((articles, values) + args)
@@ -906,7 +909,8 @@ class Page(Workflow, ModelSQL, ModelView):
         'www.page', 'Origin Page', readonly=True, ondelete='SET NULL')
     # links a draft page to its current published copy
     published_page = fields.Many2One(
-        'www.page', 'Published Page', readonly=True, ondelete='SET NULL')
+        'www.page', 'Published Page', states={'editable': False},
+        ondelete='SET NULL')
     # current workflow state of the page
     state = fields.Selection([
             ('draft', 'Draft'),
@@ -1427,7 +1431,9 @@ class Page(Workflow, ModelSQL, ModelView):
 
             if (not getattr(page, 'main_uri_language', None)
                     or page.main_uri_language.id != main_uri.language.id):
-                cls.write([page], {'main_uri_language': main_uri.language.id})
+                with without_check_access():
+                    cls.write(
+                        [page], {'main_uri_language': main_uri.language.id})
 
             # Ensure the chosen main URI satisfies the domain
             # (main_uri must be NULL). Clear first to avoid transient states
