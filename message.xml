@@ -21,5 +21,8 @@ this repository contains the full copyright notices and license terms. -->
         <record model="ir.message" id="msg_page_missing_draft">
             <field name="text">The published page "%(page)s" has no linked draft.</field>
         </record>
+        <record model="ir.message" id="msg_help_uri_show_sitemap">
+            <field name="text">Include the URI in the sitemap unless it belongs to an unpublished page or article.</field>
+        </record>
     </data>
 </tryton>
