@@ -346,7 +346,7 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     text = fields.Text('Text', translate=True)
     image = fields.Many2One('www.file', 'Image', ondelete='SET NULL')
     uris = fields.Function(fields.One2Many('www.uri', None, 'URIs'),
-        'get_uris', setter='set_uris')
+        'get_uris', setter='set_uris', searcher='search_uris')
     comments = fields.One2Many('www.comment', 'origin', 'Comments')
     seo_title = fields.Char('SEO Title', translate=True)
     seo_description = fields.Text('SEO Description', translate=True)
@@ -416,6 +416,10 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
     @classmethod
     def set_uris(cls, articles, name, value):
         pass
+
+    @classmethod
+    def search_uris(cls, name, clause):
+        return []
 
     @staticmethod
     def _uri_slug(value):
