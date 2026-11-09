@@ -338,7 +338,9 @@ class Article(DeactivableMixin, Workflow, ModelSQL, ModelView):
 
     title = fields.Char('Title', required=True, translate=True)
     site = fields.Many2One('www.site', 'Site', required=True,
-        ondelete='CASCADE')
+        ondelete='CASCADE',
+        states={'readonly': Eval('state') != 'draft'},
+        depends=['state'])
     category = fields.Many2One('www.article.category', 'Category',
         ondelete='SET NULL')
     author = fields.Many2One('www.article.author', 'Author',
